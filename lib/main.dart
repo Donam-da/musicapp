@@ -595,13 +595,13 @@ class PlayerScreen extends StatelessWidget {
                         stream: player.loopModeStream,
                         builder: (context, snapshot) {
                           final loopMode = snapshot.data ?? LoopMode.off;
-                          const icons = [
-                            Icon(Icons.repeat, color: Colors.white70),
-                            Icon(Icons.repeat, color: Colors.deepPurpleAccent),
-                            Icon(
-                              Icons.repeat_one,
-                              color: Colors.deepPurpleAccent,
-                            ),
+                          final primaryColor = Theme.of(
+                            context,
+                          ).colorScheme.primary;
+                          final icons = [
+                            const Icon(Icons.repeat, color: Colors.white70),
+                            Icon(Icons.repeat, color: primaryColor),
+                            Icon(Icons.repeat_one, color: primaryColor),
                           ];
                           const cycleModes = [
                             LoopMode.off,
@@ -611,6 +611,11 @@ class PlayerScreen extends StatelessWidget {
                           final index = cycleModes.indexOf(loopMode);
                           return IconButton(
                             icon: icons[index],
+                            tooltip: index == 0
+                                ? 'Không lặp'
+                                : index == 1
+                                ? 'Lặp danh sách'
+                                : 'Lặp 1 bài',
                             onPressed: () {
                               player.setLoopMode(
                                 cycleModes[(cycleModes.indexOf(loopMode) + 1) %
