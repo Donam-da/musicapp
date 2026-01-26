@@ -36,6 +36,8 @@ class LibraryScreen extends StatefulWidget {
 }
 
 class _LibraryScreenState extends State<LibraryScreen> {
+  bool _hasPermission = false;
+
   @override
   void initState() {
     super.initState();
@@ -43,9 +45,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   void requestPermission() async {
-    await Permission.storage.request();
-    await Permission.audio.request(); // Cho Android 13+
-    setState(() {});
+    // Yêu cầu quyền và kiểm tra kết quả
+    final status = await Permission.storage.request();
+    final audioStatus = await Permission.audio.request(); // Cho Android 13+
+
+    if (status.isGranted || audioStatus.isGranted) {
+      setState(() {
+        _hasPermission = true;
+      });
+    }
   }
 
   @override
@@ -56,60 +64,67 @@ class _LibraryScreenState extends State<LibraryScreen> {
         centerTitle: true,
         actions: [IconButton(icon: const Icon(Icons.search), onPressed: () {})],
       ),
-      body: FutureBuilder<List<SongModel>>(
-        future: AudioManager().getSongs(),
-        builder: (context, snapshot) {
-          if (snapshot.data == null) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.data!.isEmpty) {
-            return const Center(child: Text("Không tìm thấy bài hát nào"));
-          }
-
-          final songs = snapshot.data!;
-          return ListView.builder(
-            itemCount: songs.length,
-            itemBuilder: (context, index) {
-              final song = songs[index];
-              return ListTile(
-                leading: QueryArtworkWidget(
-                  id: song.id,
-                  type: ArtworkType.AUDIO,
-                  nullArtworkWidget: Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[800],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(Icons.music_note, color: Colors.white),
-                  ),
-                ),
-                title: Text(
-                  song.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w500),
-                ),
-                subtitle: Text(song.artist ?? "Unknown", maxLines: 1),
-                trailing: IconButton(
-                  icon: const Icon(Icons.more_vert),
-                  onPressed: () {},
-                ),
-                onTap: () {
-                  AudioManager().playSong(songs, index);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const PlayerScreen(),
-                    ),
+      body: !_hasPermission
+          ? const Center(child: Text("Vui lòng cấp quyền truy cập để tải nhạc"))
+          : FutureBuilder<List<SongModel>>(
+              future: AudioManager().getSongs(),
+              builder: (context, snapshot) {
+                if (snapshot.data == null) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.data!.isEmpty) {
+                  return const Center(
+                    child: Text("Không tìm thấy bài hát nào"),
                   );
-                },
-              );
-            },
-          );
-        },
-      ),
+                }
+
+                final songs = snapshot.data!;
+                return ListView.builder(
+                  itemCount: songs.length,
+                  itemBuilder: (context, index) {
+                    final song = songs[index];
+                    return ListTile(
+                      leading: QueryArtworkWidget(
+                        id: song.id,
+                        type: ArtworkType.AUDIO,
+                        nullArtworkWidget: Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[800],
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.music_note,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      title: Text(
+                        song.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontWeight: FontWeight.w500),
+                      ),
+                      subtitle: Text(song.artist ?? "Unknown", maxLines: 1),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.more_vert),
+                        onPressed: () {},
+                      ),
+                      onTap: () {
+                        AudioManager().playSong(songs, index);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const PlayerScreen(),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                );
+              },
+            ),
       bottomNavigationBar: const MiniPlayer(),
     );
   }
