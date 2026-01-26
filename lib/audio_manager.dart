@@ -5,7 +5,28 @@ class AudioManager {
   // Singleton pattern
   static final AudioManager _instance = AudioManager._internal();
   factory AudioManager() => _instance;
-  AudioManager._internal();
+
+  AudioManager._internal() {
+    // Lắng nghe trạng thái player để tự động xử lý khi bài hát kết thúc
+    // Đảm bảo nhạc luôn phát tiếp (theo chế độ đã chọn) thay vì dừng lại
+    player.playerStateStream.listen((state) {
+      if (state.processingState == ProcessingState.completed) {
+        if (player.loopMode == LoopMode.one) {
+          player.seek(Duration.zero);
+          player.play();
+        } else {
+          if (player.loopMode == LoopMode.off) {
+            player.setLoopMode(LoopMode.all);
+          }
+          final indices = player.effectiveIndices;
+          if (indices != null && indices.isNotEmpty) {
+            player.seek(Duration.zero, index: indices.first);
+            player.play();
+          }
+        }
+      }
+    });
+  }
 
   final AudioPlayer player = AudioPlayer();
   final OnAudioQuery audioQuery = OnAudioQuery();
@@ -25,6 +46,11 @@ class AudioManager {
     try {
       // Đảm bảo âm lượng player được bật tối đa
       await player.setVolume(1.0);
+
+      // Đảm bảo luôn có chế độ lặp được chọn (mặc định là Lặp danh sách nếu đang tắt)
+      if (player.loopMode == LoopMode.off) {
+        await player.setLoopMode(LoopMode.all);
+      }
 
       final playlist = ConcatenatingAudioSource(
         children: songs.map((song) {

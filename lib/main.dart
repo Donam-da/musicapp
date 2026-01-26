@@ -833,8 +833,8 @@ class _PlayerScreenState extends State<PlayerScreen>
                                 await player.setShuffleModeEnabled(false);
                                 await player.setLoopMode(LoopMode.all);
                               } else {
-                                // Bật ngẫu nhiên, tắt lặp lại
-                                await player.setLoopMode(LoopMode.off);
+                                // Bật ngẫu nhiên, vẫn giữ lặp danh sách để phát liên tục
+                                await player.setLoopMode(LoopMode.all);
                                 await player.setShuffleModeEnabled(true);
                                 await player.shuffle();
                               }
@@ -907,46 +907,57 @@ class _PlayerScreenState extends State<PlayerScreen>
                         },
                       ),
                       // Nút Repeat (Lặp lại)
-                      StreamBuilder<LoopMode>(
-                        stream: player.loopModeStream,
+                      StreamBuilder<bool>(
+                        stream: player.shuffleModeEnabledStream,
                         builder: (context, snapshot) {
-                          final loopMode = snapshot.data ?? LoopMode.off;
-                          Icon icon;
-                          String tooltip;
-                          Color color = Colors.white70;
+                          final shuffleEnabled = snapshot.data ?? false;
+                          return StreamBuilder<LoopMode>(
+                            stream: player.loopModeStream,
+                            builder: (context, snapshot) {
+                              final loopMode = snapshot.data ?? LoopMode.all;
+                              Icon icon;
+                              String tooltip;
+                              Color color;
 
-                          if (loopMode == LoopMode.one) {
-                            icon = const Icon(Icons.repeat_one);
-                            tooltip = 'Lặp 1 bài';
-                            color = Colors.cyan;
-                          } else if (loopMode == LoopMode.all) {
-                            icon = const Icon(Icons.repeat);
-                            tooltip = 'Lặp danh sách';
-                            color = Colors.cyan;
-                          } else {
-                            // LoopMode.off
-                            icon = const Icon(Icons.repeat);
-                            tooltip = 'Lặp lại';
-                          }
-
-                          return IconButton(
-                            icon: icon,
-                            color: color,
-                            tooltip: tooltip,
-                            onPressed: () async {
-                              // Nếu đang bật ngẫu nhiên, bấm nút này sẽ tắt ngẫu nhiên và bật lặp lại danh sách
-                              if (player.shuffleModeEnabled) {
-                                await player.setShuffleModeEnabled(false);
-                                await player.setLoopMode(LoopMode.all);
-                                return;
-                              }
-
-                              // Chuyển đổi giữa các chế độ lặp lại: Lặp 1 bài -> Lặp danh sách -> Lặp 1 bài
-                              if (loopMode == LoopMode.one) {
-                                await player.setLoopMode(LoopMode.all);
+                              // Logic hiển thị:
+                              // 1. Nếu Shuffle đang bật -> Nút Repeat màu trắng (dù loopMode là all)
+                              // 2. Nếu Shuffle tắt -> Nút Repeat màu xanh (theo chế độ One hoặc All)
+                              if (shuffleEnabled) {
+                                icon = const Icon(Icons.repeat);
+                                tooltip = 'Lặp lại';
+                                color = Colors.white70;
                               } else {
-                                await player.setLoopMode(LoopMode.one);
+                                if (loopMode == LoopMode.one) {
+                                  icon = const Icon(Icons.repeat_one);
+                                  tooltip = 'Lặp 1 bài';
+                                  color = Colors.cyan;
+                                } else {
+                                  // Mặc định là Lặp danh sách (LoopMode.all hoặc off)
+                                  icon = const Icon(Icons.repeat);
+                                  tooltip = 'Lặp danh sách';
+                                  color = Colors.cyan;
+                                }
                               }
+
+                              return IconButton(
+                                icon: icon,
+                                color: color,
+                                tooltip: tooltip,
+                                onPressed: () async {
+                                  if (shuffleEnabled) {
+                                    // Nếu đang Shuffle -> Tắt Shuffle, chuyển về Lặp danh sách
+                                    await player.setShuffleModeEnabled(false);
+                                    await player.setLoopMode(LoopMode.all);
+                                  } else {
+                                    // Nếu đang Lặp -> Chuyển đổi qua lại giữa One và All
+                                    if (loopMode == LoopMode.one) {
+                                      await player.setLoopMode(LoopMode.all);
+                                    } else {
+                                      await player.setLoopMode(LoopMode.one);
+                                    }
+                                  }
+                                },
+                              );
                             },
                           );
                         },
