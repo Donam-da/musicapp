@@ -28,11 +28,17 @@ subprojects {
         val fixConfig = {
             project.extensions.findByName("android")?.let { android ->
                 android.javaClass.getMethod("setNamespace", String::class.java).invoke(android, "com.lucasjosino.on_audio_query")
+
+                // Ép buộc sử dụng Java 17 để đồng bộ với app và loại bỏ cảnh báo obsolete
+                val compileOptions = android.javaClass.getMethod("getCompileOptions").invoke(android)
+                val javaVersion = org.gradle.api.JavaVersion.VERSION_17
+                compileOptions.javaClass.getMethod("setSourceCompatibility", org.gradle.api.JavaVersion::class.java).invoke(compileOptions, javaVersion)
+                compileOptions.javaClass.getMethod("setTargetCompatibility", org.gradle.api.JavaVersion::class.java).invoke(compileOptions, javaVersion)
             }
             project.tasks.configureEach {
                 try {
                     val kotlinOptions = this.javaClass.getMethod("getKotlinOptions").invoke(this)
-                    kotlinOptions.javaClass.getMethod("setJvmTarget", String::class.java).invoke(kotlinOptions, "1.8")
+                    kotlinOptions.javaClass.getMethod("setJvmTarget", String::class.java).invoke(kotlinOptions, "17")
                 } catch (e: Exception) { }
             }
         }
