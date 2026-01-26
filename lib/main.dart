@@ -38,6 +38,7 @@ class LibraryScreen extends StatefulWidget {
 
 class _LibraryScreenState extends State<LibraryScreen> {
   bool _hasPermission = false;
+  List<SongModel>? _selectedSongs;
 
   @override
   void initState() {
@@ -71,7 +72,23 @@ class _LibraryScreenState extends State<LibraryScreen> {
           if (result != null) {
             // Lấy danh sách đường dẫn và phát nhạc
             List<String> paths = result.paths.whereType<String>().toList();
-            AudioManager().playLocalFiles(paths);
+            debugPrint(
+              "Đang phát các file: $paths",
+            ); // Kiểm tra log xem có đường dẫn không
+            final songs = paths.map((path) {
+              final fileName = path.split(RegExp(r'[/\\]')).last;
+              return SongModel({
+                "_id": path.hashCode,
+                "_data": path,
+                "title": fileName,
+                "artist": "Tệp tùy chọn",
+              });
+            }).toList();
+
+            setState(() {
+              _selectedSongs = songs;
+            });
+            AudioManager().playSong(songs, 0);
           }
         },
         child: const Icon(Icons.add),
@@ -83,6 +100,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
       ),
       body: !_hasPermission
           ? const Center(child: Text("Vui lòng cấp quyền truy cập để tải nhạc"))
+          : _selectedSongs != null
+          ? _buildSongList(_selectedSongs!, isCustomFile: true)
           : FutureBuilder<List<SongModel>>(
               future: AudioManager().getSongs(),
               builder: (context, snapshot) {
@@ -96,53 +115,62 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 }
 
                 final songs = snapshot.data!;
-                return ListView.builder(
-                  itemCount: songs.length,
-                  itemBuilder: (context, index) {
-                    final song = songs[index];
-                    return ListTile(
-                      leading: QueryArtworkWidget(
-                        id: song.id,
-                        type: ArtworkType.AUDIO,
-                        nullArtworkWidget: Container(
-                          width: 50,
-                          height: 50,
-                          decoration: BoxDecoration(
-                            color: Colors.grey[800],
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(
-                            Icons.music_note,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                      title: Text(
-                        song.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w500),
-                      ),
-                      subtitle: Text(song.artist ?? "Unknown", maxLines: 1),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.more_vert),
-                        onPressed: () {},
-                      ),
-                      onTap: () {
-                        AudioManager().playSong(songs, index);
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const PlayerScreen(),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                );
+                return _buildSongList(songs);
               },
             ),
       bottomNavigationBar: const MiniPlayer(),
+    );
+  }
+
+  Widget _buildSongList(List<SongModel> songs, {bool isCustomFile = false}) {
+    return ListView.builder(
+      itemCount: songs.length,
+      itemBuilder: (context, index) {
+        final song = songs[index];
+        return ListTile(
+          leading: isCustomFile
+              ? Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[800],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.music_note, color: Colors.white),
+                )
+              : QueryArtworkWidget(
+                  id: song.id,
+                  type: ArtworkType.AUDIO,
+                  nullArtworkWidget: Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[800],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.music_note, color: Colors.white),
+                  ),
+                ),
+          title: Text(
+            song.title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontWeight: FontWeight.w500),
+          ),
+          subtitle: Text(song.artist ?? "Unknown", maxLines: 1),
+          trailing: IconButton(
+            icon: const Icon(Icons.more_vert),
+            onPressed: () {},
+          ),
+          onTap: () {
+            AudioManager().playSong(songs, index);
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const PlayerScreen()),
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -159,6 +187,7 @@ class MiniPlayer extends StatelessWidget {
         final state = snapshot.data;
         if (state?.currentSource == null) return const SizedBox.shrink();
         final song = state!.currentSource!.tag as SongModel;
+        final isCustom = song.artist == "Tệp tùy chọn";
 
         return Container(
           height: 70,
@@ -169,11 +198,13 @@ class MiniPlayer extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16.0),
           child: Row(
             children: [
-              QueryArtworkWidget(
-                id: song.id,
-                type: ArtworkType.AUDIO,
-                nullArtworkWidget: const Icon(Icons.album, size: 40),
-              ),
+              isCustom
+                  ? const Icon(Icons.music_note, size: 40)
+                  : QueryArtworkWidget(
+                      id: song.id,
+                      type: ArtworkType.AUDIO,
+                      nullArtworkWidget: const Icon(Icons.album, size: 40),
+                    ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -253,6 +284,7 @@ class PlayerScreen extends StatelessWidget {
           final state = snapshot.data;
           if (state?.currentSource == null) return const SizedBox.shrink();
           final song = state!.currentSource!.tag as SongModel;
+          final isCustom = song.artist == "Tệp tùy chọn";
           return Padding(
             padding: const EdgeInsets.all(24.0),
             child: Column(
@@ -272,17 +304,23 @@ class PlayerScreen extends StatelessWidget {
                       ],
                     ),
                     child: Center(
-                      child: QueryArtworkWidget(
-                        id: song.id,
-                        type: ArtworkType.AUDIO,
-                        artworkHeight: 300,
-                        artworkWidth: 300,
-                        nullArtworkWidget: const Icon(
-                          Icons.music_note,
-                          size: 120,
-                          color: Colors.white54,
-                        ),
-                      ),
+                      child: isCustom
+                          ? const Icon(
+                              Icons.music_note,
+                              size: 120,
+                              color: Colors.white54,
+                            )
+                          : QueryArtworkWidget(
+                              id: song.id,
+                              type: ArtworkType.AUDIO,
+                              artworkHeight: 300,
+                              artworkWidth: 300,
+                              nullArtworkWidget: const Icon(
+                                Icons.music_note,
+                                size: 120,
+                                color: Colors.white54,
+                              ),
+                            ),
                     ),
                   ),
                 ),

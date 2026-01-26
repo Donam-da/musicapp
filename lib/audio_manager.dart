@@ -23,17 +23,27 @@ class AudioManager {
   // Thiết lập danh sách phát và phát bài hát tại index được chọn
   Future<void> playSong(List<SongModel> songs, int initialIndex) async {
     try {
+      // Đảm bảo âm lượng player được bật tối đa
+      await player.setVolume(1.0);
+
       final playlist = ConcatenatingAudioSource(
         children: songs.map((song) {
+          Uri audioUri;
+          if (song.uri != null && song.uri!.isNotEmpty) {
+            audioUri = Uri.parse(song.uri!);
+          } else {
+            // Sử dụng Uri.file cho đường dẫn file cục bộ để đảm bảo mã hóa đúng các ký tự đặc biệt
+            audioUri = Uri.file(song.data);
+          }
           return AudioSource.uri(
-            Uri.parse(song.uri ?? ""),
+            audioUri,
             tag:
                 song, // Lưu đối tượng SongModel vào tag để dùng hiển thị UI sau này
           );
         }).toList(),
       );
       await player.setAudioSource(playlist, initialIndex: initialIndex);
-      player.play();
+      await player.play(); // Đợi lệnh play thực hiện xong để bắt lỗi nếu có
     } catch (e) {
       print("Lỗi phát nhạc: $e");
     }
