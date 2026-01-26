@@ -70,7 +70,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
         onPressed: () async {
           // Mở trình chọn file
           FilePickerResult? result = await FilePicker.platform.pickFiles(
-            type: FileType.audio, // Chỉ chọn file âm thanh
+            type: FileType.custom,
+            allowedExtensions: [
+              'mp3',
+              'wav',
+              'm4a',
+              'flac',
+              'ogg',
+              'aac',
+              'mp4',
+            ],
             allowMultiple: true, // Cho phép chọn nhiều file
           );
 
