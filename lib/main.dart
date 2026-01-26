@@ -54,10 +54,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final audioStatus = await Permission.audio.request(); // Cho Android 13+
 
     if (status.isGranted || audioStatus.isGranted) {
-      final songs = await AudioManager().getSongs();
       setState(() {
         _hasPermission = true;
-        _librarySongs = songs;
+        _librarySongs = [];
         _isLoading = false;
       });
     }
@@ -110,7 +109,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           : _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _librarySongs.isEmpty
-          ? const Center(child: Text("Không tìm thấy bài hát nào"))
+          ? const Center(child: Text("Nhấn nút + để thêm bài hát"))
           : _buildSongList(_librarySongs),
       bottomNavigationBar: const MiniPlayer(),
     );
