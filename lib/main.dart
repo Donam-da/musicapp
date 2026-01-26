@@ -448,7 +448,16 @@ class MiniPlayer extends StatelessWidget {
                         ),
                         IconButton(
                           icon: const Icon(Icons.skip_previous),
-                          onPressed: player.seekToPrevious,
+                          onPressed: () {
+                            if (player.hasPrevious) {
+                              player.seekToPrevious();
+                            } else {
+                              final indices = player.effectiveIndices;
+                              if (indices != null && indices.isNotEmpty) {
+                                player.seek(Duration.zero, index: indices.last);
+                              }
+                            }
+                          },
                         ),
                         StreamBuilder<PlayerState>(
                           stream: player.playerStateStream,
@@ -479,7 +488,19 @@ class MiniPlayer extends StatelessWidget {
                         ),
                         IconButton(
                           icon: const Icon(Icons.skip_next),
-                          onPressed: player.seekToNext,
+                          onPressed: () {
+                            if (player.hasNext) {
+                              player.seekToNext();
+                            } else {
+                              final indices = player.effectiveIndices;
+                              if (indices != null && indices.isNotEmpty) {
+                                player.seek(
+                                  Duration.zero,
+                                  index: indices.first,
+                                );
+                              }
+                            }
+                          },
                         ),
                       ],
                     ),
@@ -706,7 +727,16 @@ class PlayerScreen extends StatelessWidget {
                           size: 40,
                           color: Colors.white,
                         ),
-                        onPressed: player.seekToPrevious,
+                        onPressed: () {
+                          if (player.hasPrevious) {
+                            player.seekToPrevious();
+                          } else {
+                            final indices = player.effectiveIndices;
+                            if (indices != null && indices.isNotEmpty) {
+                              player.seek(Duration.zero, index: indices.last);
+                            }
+                          }
+                        },
                       ),
                       // Nút Play/Pause lớn
                       Container(
@@ -744,7 +774,16 @@ class PlayerScreen extends StatelessWidget {
                           size: 40,
                           color: Colors.white,
                         ),
-                        onPressed: player.seekToNext,
+                        onPressed: () {
+                          if (player.hasNext) {
+                            player.seekToNext();
+                          } else {
+                            final indices = player.effectiveIndices;
+                            if (indices != null && indices.isNotEmpty) {
+                              player.seek(Duration.zero, index: indices.first);
+                            }
+                          }
+                        },
                       ),
                       // Nút Repeat (Lặp lại)
                       StreamBuilder<LoopMode>(
