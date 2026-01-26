@@ -373,7 +373,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
               color: Colors.cyan,
             ),
           ),
-          subtitle: Text(song.artist ?? "Unknown", maxLines: 1),
+          subtitle: Text(
+            (song.artist == null || song.artist == '<unknown>')
+                ? song.data
+                : song.artist!,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
           trailing: PopupMenuButton<String>(
             onSelected: (value) {
               if (value == 'info') {
@@ -1166,8 +1172,12 @@ class SongSearchDelegate extends SearchDelegate {
                 ),
           title: Text(song.title, style: const TextStyle(color: Colors.white)),
           subtitle: Text(
-            song.artist ?? "Unknown",
+            (song.artist == null || song.artist == '<unknown>')
+                ? song.data
+                : song.artist!,
             style: const TextStyle(color: Colors.white70),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           onTap: () {
             // Tìm vị trí thực của bài hát trong danh sách gốc để giữ context playlist
