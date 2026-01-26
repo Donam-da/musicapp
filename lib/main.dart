@@ -547,6 +547,9 @@ class _PlayerScreenState extends State<PlayerScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   StreamSubscription<bool>? _playingSubscription;
+  bool _isVolumeVisible = false;
+  Timer? _volumeTimer;
+  double _currentVolume = 1.0;
 
   @override
   void initState() {
@@ -555,6 +558,9 @@ class _PlayerScreenState extends State<PlayerScreen>
       vsync: this,
       duration: const Duration(seconds: 20), // Quay 1 vòng hết 20 giây
     );
+
+    // Lấy âm lượng hiện tại
+    _currentVolume = AudioManager().player.volume;
 
     // Lắng nghe trạng thái phát nhạc để điều khiển đĩa quay
     final player = AudioManager().player;
@@ -570,8 +576,31 @@ class _PlayerScreenState extends State<PlayerScreen>
   @override
   void dispose() {
     _controller.dispose();
+    _volumeTimer?.cancel();
     _playingSubscription?.cancel();
     super.dispose();
+  }
+
+  void _toggleVolumeControl() {
+    setState(() {
+      _isVolumeVisible = !_isVolumeVisible;
+    });
+    if (_isVolumeVisible) {
+      _resetVolumeTimer();
+    } else {
+      _volumeTimer?.cancel();
+    }
+  }
+
+  void _resetVolumeTimer() {
+    _volumeTimer?.cancel();
+    _volumeTimer = Timer(const Duration(seconds: 2), () {
+      if (mounted) {
+        setState(() {
+          _isVolumeVisible = false;
+        });
+      }
+    });
   }
 
   @override
@@ -678,7 +707,53 @@ class _PlayerScreenState extends State<PlayerScreen>
                       overflow: TextOverflow.ellipsis,
                     ),
                   ],
-                  const SizedBox(height: 30),
+                  const SizedBox(height: 20),
+                  // Điều chỉnh âm lượng
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [
+                      IconButton(
+                        icon: Icon(
+                          _currentVolume == 0
+                              ? Icons.volume_off
+                              : Icons.volume_up,
+                          color: Colors.white70,
+                        ),
+                        onPressed: _toggleVolumeControl,
+                      ),
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        width: _isVolumeVisible ? 200 : 0,
+                        curve: Curves.easeInOut,
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
+                          physics: const NeverScrollableScrollPhysics(),
+                          child: SizedBox(
+                            width: 200,
+                            child: SliderTheme(
+                              data: SliderTheme.of(context).copyWith(
+                                trackHeight: 2.0,
+                                thumbShape: const RoundSliderThumbShape(
+                                  enabledThumbRadius: 6.0,
+                                ),
+                                activeTrackColor: Colors.cyan,
+                                inactiveTrackColor: Colors.white24,
+                                thumbColor: Colors.white,
+                              ),
+                              child: Slider(
+                                value: _currentVolume,
+                                onChanged: (value) {
+                                  setState(() => _currentVolume = value);
+                                  player.setVolume(value);
+                                  _resetVolumeTimer(); // Reset timer khi đang kéo
+                                },
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                   // Thanh trượt thời gian (Seek Bar)
                   StreamBuilder<Duration>(
                     stream: player.positionStream,
