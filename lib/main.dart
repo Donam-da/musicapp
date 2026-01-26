@@ -449,13 +449,18 @@ class PlayerScreen extends StatelessWidget {
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    song.artist ?? "Unknown",
-                    style: const TextStyle(fontSize: 18, color: Colors.white70),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  if (!isCustom) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      song.artist ?? "Unknown",
+                      style: const TextStyle(
+                        fontSize: 18,
+                        color: Colors.white70,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                   const SizedBox(height: 30),
                   // Thanh trượt thời gian (Seek Bar)
                   StreamBuilder<Duration>(
