@@ -44,35 +44,58 @@ class _LibraryScreenState extends State<LibraryScreen> {
   List<SongModel>? _selectedSongs;
   List<SongModel> _librarySongs = [];
   bool _isLoading = true;
+  bool _isDeviceMode =
+      false; // Biến trạng thái: false = Thủ công, true = Quét máy
 
   @override
   void initState() {
     super.initState();
-    requestPermission();
-    _loadSelectedSongs(); // Tải danh sách nhạc đã lưu khi mở app
+    _initApp();
   }
 
-  void requestPermission() async {
+  Future<void> _initApp() async {
+    await _loadSavedData();
+    await requestPermission();
+  }
+
+  Future<void> requestPermission() async {
     // Yêu cầu quyền và kiểm tra kết quả
     final status = await Permission.storage.request();
     final audioStatus = await Permission.audio.request(); // Cho Android 13+
 
     if (status.isGranted || audioStatus.isGranted) {
-      final songs = await AudioManager().getSongs();
       setState(() {
         _hasPermission = true;
-        _librarySongs = songs;
-        _isLoading = false;
       });
+      if (_isDeviceMode) {
+        await _fetchDeviceSongs();
+      } else {
+        setState(() => _isLoading = false);
+      }
+    } else {
+      setState(() => _isLoading = false);
     }
   }
 
-  // Hàm tải danh sách nhạc từ bộ nhớ
-  Future<void> _loadSelectedSongs() async {
+  // Hàm quét nhạc từ thiết bị (chỉ gọi khi cần)
+  Future<void> _fetchDeviceSongs() async {
+    setState(() => _isLoading = true);
+    final songs = await AudioManager().getSongs();
+    setState(() {
+      _librarySongs = songs;
+      _isLoading = false;
+    });
+  }
+
+  // Hàm tải dữ liệu đã lưu (chế độ + danh sách nhạc)
+  Future<void> _loadSavedData() async {
     final prefs = await SharedPreferences.getInstance();
+    final savedMode = prefs.getBool('is_device_mode') ?? false;
     final List<String>? paths = prefs.getStringList('custom_playlist');
+
+    List<SongModel>? songs;
     if (paths != null && paths.isNotEmpty) {
-      final songs = paths.map((path) {
+      songs = paths.map((path) {
         final fileName = path.split(RegExp(r'[/\\]')).last;
         String directory = path;
         final lastSeparator = path.lastIndexOf(RegExp(r'[/\\]'));
@@ -87,11 +110,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
           "genre": "CustomFile",
         });
       }).toList();
-
-      setState(() {
-        _selectedSongs = songs;
-      });
     }
+
+    setState(() {
+      _isDeviceMode = savedMode;
+      _selectedSongs = songs;
+    });
   }
 
   // Hàm lưu danh sách nhạc hiện tại vào bộ nhớ
@@ -105,73 +129,104 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
+  // Hàm lưu chế độ xem hiện tại
+  Future<void> _saveMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('is_device_mode', _isDeviceMode);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          // Mở trình chọn file
-          FilePickerResult? result = await FilePicker.platform.pickFiles(
-            type: FileType.custom,
-            allowedExtensions: [
-              'mp3',
-              'wav',
-              'm4a',
-              'flac',
-              'ogg',
-              'aac',
-              'mp4',
-            ],
-            allowMultiple: true, // Cho phép chọn nhiều file
-          );
+      floatingActionButton: _isDeviceMode
+          ? null
+          : FloatingActionButton(
+              onPressed: () async {
+                // Mở trình chọn file
+                FilePickerResult? result = await FilePicker.platform.pickFiles(
+                  type: FileType.custom,
+                  allowedExtensions: [
+                    'mp3',
+                    'wav',
+                    'm4a',
+                    'flac',
+                    'ogg',
+                    'aac',
+                    'mp4',
+                  ],
+                  allowMultiple: true, // Cho phép chọn nhiều file
+                );
 
-          if (result != null) {
-            // Lấy danh sách đường dẫn và phát nhạc
-            List<String> paths = result.paths.whereType<String>().toList();
-            debugPrint(
-              "Đang phát các file: $paths",
-            ); // Kiểm tra log xem có đường dẫn không
-            final songs = paths.map((path) {
-              final fileName = path.split(RegExp(r'[/\\]')).last;
-              String directory = path;
-              final lastSeparator = path.lastIndexOf(RegExp(r'[/\\]'));
-              if (lastSeparator != -1) {
-                directory = path.substring(0, lastSeparator);
-              }
-              return SongModel({
-                "_id": path.hashCode,
-                "_data": path,
-                "title": fileName,
-                "artist": directory,
-                "genre": "CustomFile",
-              });
-            }).toList();
+                if (result != null) {
+                  // Lấy danh sách đường dẫn và phát nhạc
+                  List<String> paths = result.paths
+                      .whereType<String>()
+                      .toList();
+                  debugPrint(
+                    "Đang phát các file: $paths",
+                  ); // Kiểm tra log xem có đường dẫn không
+                  final songs = paths.map((path) {
+                    final fileName = path.split(RegExp(r'[/\\]')).last;
+                    String directory = path;
+                    final lastSeparator = path.lastIndexOf(RegExp(r'[/\\]'));
+                    if (lastSeparator != -1) {
+                      directory = path.substring(0, lastSeparator);
+                    }
+                    return SongModel({
+                      "_id": path.hashCode,
+                      "_data": path,
+                      "title": fileName,
+                      "artist": directory,
+                      "genre": "CustomFile",
+                    });
+                  }).toList();
 
-            int playIndex = 0;
-            setState(() {
-              // Nối thêm vào danh sách cũ thay vì thay thế
-              if (_selectedSongs != null) {
-                playIndex =
-                    _selectedSongs!.length; // Vị trí bắt đầu của bài mới
-                _selectedSongs!.addAll(songs);
-              } else {
-                _selectedSongs = songs;
-              }
-            });
-            _saveSelectedSongs(); // Lưu lại danh sách mới
-            AudioManager().playSong(_selectedSongs!, playIndex);
-          }
-        },
-        child: const Icon(Icons.add),
-      ),
+                  int playIndex = 0;
+                  setState(() {
+                    // Nối thêm vào danh sách cũ thay vì thay thế
+                    if (_selectedSongs != null) {
+                      playIndex =
+                          _selectedSongs!.length; // Vị trí bắt đầu của bài mới
+                      _selectedSongs!.addAll(songs);
+                    } else {
+                      _selectedSongs = songs;
+                    }
+                  });
+                  _saveSelectedSongs(); // Lưu lại danh sách mới
+                  AudioManager().playSong(_selectedSongs!, playIndex);
+                }
+              },
+              child: const Icon(Icons.add),
+            ),
       appBar: AppBar(
-        title: const Text('Thư viện nhạc'),
+        title: Text(_isDeviceMode ? 'Toàn bộ thiết bị' : 'Danh sách thủ công'),
         centerTitle: true,
         actions: [
           IconButton(
+            icon: Icon(
+              _isDeviceMode ? Icons.folder_special : Icons.library_music,
+            ),
+            tooltip: _isDeviceMode
+                ? "Chuyển sang thủ công"
+                : "Chuyển sang quét thiết bị",
+            onPressed: () {
+              setState(() {
+                _isDeviceMode = !_isDeviceMode;
+              });
+              _saveMode();
+              // Nếu chuyển sang chế độ quét máy và chưa có dữ liệu thì mới quét
+              if (_isDeviceMode && _librarySongs.isEmpty) {
+                _fetchDeviceSongs();
+              }
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.search),
             onPressed: () {
-              final currentList = _selectedSongs ?? _librarySongs;
+              // Tìm kiếm dựa trên danh sách đang hiển thị
+              final currentList = _isDeviceMode
+                  ? _librarySongs
+                  : (_selectedSongs ?? []);
               if (currentList.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text("Danh sách nhạc trống")),
@@ -192,13 +247,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
       ),
       body: !_hasPermission
           ? const Center(child: Text("Vui lòng cấp quyền truy cập để tải nhạc"))
-          : _selectedSongs != null
-          ? _buildSongList(_selectedSongs!, isCustomFile: true)
           : _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _librarySongs.isEmpty
-          ? const Center(child: Text("Nhấn nút + để thêm bài hát"))
-          : _buildSongList(_librarySongs),
+          : _isDeviceMode
+          ? (_librarySongs.isEmpty
+                ? const Center(
+                    child: Text("Không tìm thấy bài hát nào trên máy"),
+                  )
+                : _buildSongList(_librarySongs))
+          : (_selectedSongs == null || _selectedSongs!.isEmpty
+                ? const Center(child: Text("Nhấn nút + để thêm bài hát"))
+                : _buildSongList(_selectedSongs!, isCustomFile: true)),
       bottomNavigationBar: const MiniPlayer(),
     );
   }
