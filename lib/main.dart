@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'audio_manager.dart';
 
 void main() {
@@ -47,6 +48,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   void initState() {
     super.initState();
     requestPermission();
+    _loadSelectedSongs(); // Tải danh sách nhạc đã lưu khi mở app
   }
 
   void requestPermission() async {
@@ -60,6 +62,44 @@ class _LibraryScreenState extends State<LibraryScreen> {
         _librarySongs = [];
         _isLoading = false;
       });
+    }
+  }
+
+  // Hàm tải danh sách nhạc từ bộ nhớ
+  Future<void> _loadSelectedSongs() async {
+    final prefs = await SharedPreferences.getInstance();
+    final List<String>? paths = prefs.getStringList('custom_playlist');
+    if (paths != null && paths.isNotEmpty) {
+      final songs = paths.map((path) {
+        final fileName = path.split(RegExp(r'[/\\]')).last;
+        String directory = path;
+        final lastSeparator = path.lastIndexOf(RegExp(r'[/\\]'));
+        if (lastSeparator != -1) {
+          directory = path.substring(0, lastSeparator);
+        }
+        return SongModel({
+          "_id": path.hashCode,
+          "_data": path,
+          "title": fileName,
+          "artist": directory,
+          "genre": "CustomFile",
+        });
+      }).toList();
+
+      setState(() {
+        _selectedSongs = songs;
+      });
+    }
+  }
+
+  // Hàm lưu danh sách nhạc hiện tại vào bộ nhớ
+  Future<void> _saveSelectedSongs() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_selectedSongs != null && _selectedSongs!.isNotEmpty) {
+      final paths = _selectedSongs!.map((s) => s.data).toList();
+      await prefs.setStringList('custom_playlist', paths);
+    } else {
+      await prefs.remove('custom_playlist');
     }
   }
 
@@ -105,10 +145,19 @@ class _LibraryScreenState extends State<LibraryScreen> {
               });
             }).toList();
 
+            int playIndex = 0;
             setState(() {
-              _selectedSongs = songs;
+              // Nối thêm vào danh sách cũ thay vì thay thế
+              if (_selectedSongs != null) {
+                playIndex =
+                    _selectedSongs!.length; // Vị trí bắt đầu của bài mới
+                _selectedSongs!.addAll(songs);
+              } else {
+                _selectedSongs = songs;
+              }
             });
-            AudioManager().playSong(songs, 0);
+            _saveSelectedSongs(); // Lưu lại danh sách mới
+            AudioManager().playSong(_selectedSongs!, playIndex);
           }
         },
         child: const Icon(Icons.add),
@@ -138,6 +187,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         if (_selectedSongs?.isEmpty ?? false) {
           _selectedSongs = null; // Quay về danh sách thư viện nếu xóa hết
         }
+        _saveSelectedSongs(); // Cập nhật lại bộ nhớ sau khi xóa
       } else {
         _librarySongs.remove(song);
       }
