@@ -57,9 +57,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final audioStatus = await Permission.audio.request(); // Cho Android 13+
 
     if (status.isGranted || audioStatus.isGranted) {
+      final songs = await AudioManager().getSongs();
       setState(() {
         _hasPermission = true;
-        _librarySongs = [];
+        _librarySongs = songs;
         _isLoading = false;
       });
     }
@@ -165,7 +166,28 @@ class _LibraryScreenState extends State<LibraryScreen> {
       appBar: AppBar(
         title: const Text('Thư viện nhạc'),
         centerTitle: true,
-        actions: [IconButton(icon: const Icon(Icons.search), onPressed: () {})],
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.search),
+            onPressed: () {
+              final currentList = _selectedSongs ?? _librarySongs;
+              if (currentList.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Danh sách nhạc trống")),
+                );
+                return;
+              }
+
+              showSearch(
+                context: context,
+                delegate: SongSearchDelegate(
+                  songs: currentList,
+                  isCustomFile: _selectedSongs != null,
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: !_hasPermission
           ? const Center(child: Text("Vui lòng cấp quyền truy cập để tải nhạc"))
@@ -770,5 +792,153 @@ class PlayerScreen extends StatelessWidget {
     final minutes = twoDigits(duration.inMinutes.remainder(60));
     final seconds = twoDigits(duration.inSeconds.remainder(60));
     return "$minutes:$seconds";
+  }
+}
+
+class SongSearchDelegate extends SearchDelegate {
+  final List<SongModel> songs;
+  final bool isCustomFile;
+
+  SongSearchDelegate({required this.songs, required this.isCustomFile});
+
+  // Hàm loại bỏ dấu tiếng Việt để hỗ trợ tìm kiếm không dấu
+  String _removeDiacritics(String str) {
+    const withDia =
+        'áàảãạăắằẳẵặâấầẩẫậéèẻẽẹêếềểễệíìỉĩịóòỏõọôốồổỗộơớờởỡợúùủũụưứừửữựýỳỷỹỵđÁÀẢÃẠĂẮẰẲẴẶÂẤẦẨẪẬÉÈẺẼẸÊẾỀỂỄỆÍÌỈĨỊÓÒỎÕỌÔỐỒỔỖỘƠỚỜỞỠỢÚÙỦŨỤƯỨỪỬỮỰÝỲỶỸỴĐ';
+    const withoutDia =
+        'aaaaaaaaaaaaaaaaaeeeeeeeeeeeiiiiiooooooooooooooooouuuuuuuuuuuyyyyydAAAAAAAAAAAAAAAAAEEEEEEEEEEEIIIIIOOOOOOOOOOOOOOOOOUUUUUUUUUUUYYYYYD';
+
+    StringBuffer sb = StringBuffer();
+    for (int i = 0; i < str.length; i++) {
+      String char = str[i];
+      int index = withDia.indexOf(char);
+      if (index >= 0) {
+        sb.write(withoutDia[index]);
+      } else {
+        sb.write(char);
+      }
+    }
+    return sb.toString();
+  }
+
+  @override
+  String get searchFieldLabel => 'Tìm bài hát, nghệ sĩ...';
+
+  @override
+  ThemeData appBarTheme(BuildContext context) {
+    final theme = Theme.of(context);
+    return theme.copyWith(
+      inputDecorationTheme: const InputDecorationTheme(
+        hintStyle: TextStyle(color: Colors.white54),
+        border: InputBorder.none,
+      ),
+    );
+  }
+
+  @override
+  List<Widget>? buildActions(BuildContext context) {
+    return [
+      if (query.isNotEmpty)
+        IconButton(
+          icon: const Icon(Icons.clear),
+          onPressed: () {
+            query = '';
+            showSuggestions(context);
+          },
+        ),
+    ];
+  }
+
+  @override
+  Widget? buildLeading(BuildContext context) {
+    return IconButton(
+      icon: const Icon(Icons.arrow_back),
+      onPressed: () => close(context, null),
+    );
+  }
+
+  @override
+  Widget buildResults(BuildContext context) {
+    return _buildList(context);
+  }
+
+  @override
+  Widget buildSuggestions(BuildContext context) {
+    return _buildList(context);
+  }
+
+  Widget _buildList(BuildContext context) {
+    // Chuẩn hóa từ khóa: chữ thường + bỏ dấu
+    final queryUnaccented = _removeDiacritics(query.toLowerCase());
+
+    // Lọc danh sách theo từ khóa (Title hoặc Artist)
+    final suggestions = songs.where((song) {
+      final titleUnaccented = _removeDiacritics(song.title.toLowerCase());
+      final artistUnaccented = _removeDiacritics(
+        (song.artist ?? '').toLowerCase(),
+      );
+      return titleUnaccented.contains(queryUnaccented) ||
+          artistUnaccented.contains(queryUnaccented);
+    }).toList();
+
+    if (suggestions.isEmpty) {
+      return Center(
+        child: Text(
+          'Không tìm thấy kết quả cho "$query"',
+          style: const TextStyle(color: Colors.white54),
+        ),
+      );
+    }
+
+    return ListView.builder(
+      itemCount: suggestions.length,
+      itemBuilder: (context, index) {
+        final song = suggestions[index];
+        return ListTile(
+          leading: isCustomFile
+              ? Container(
+                  width: 50,
+                  height: 50,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[800],
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: const Icon(Icons.music_note, color: Colors.white),
+                )
+              : QueryArtworkWidget(
+                  id: song.id,
+                  type: ArtworkType.AUDIO,
+                  nullArtworkWidget: Container(
+                    width: 50,
+                    height: 50,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[800],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.music_note, color: Colors.white),
+                  ),
+                ),
+          title: Text(song.title, style: const TextStyle(color: Colors.white)),
+          subtitle: Text(
+            song.artist ?? "Unknown",
+            style: const TextStyle(color: Colors.white70),
+          ),
+          onTap: () {
+            // Tìm vị trí thực của bài hát trong danh sách gốc để giữ context playlist
+            final originalIndex = songs.indexOf(song);
+
+            // Đóng tìm kiếm
+            close(context, null);
+
+            // Phát nhạc và mở màn hình Player
+            AudioManager().playSong(songs, originalIndex);
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const PlayerScreen()),
+            );
+          },
+        );
+      },
+    );
   }
 }
