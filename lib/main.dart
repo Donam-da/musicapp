@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:just_audio/just_audio.dart';
@@ -535,8 +536,43 @@ class MiniPlayer extends StatelessWidget {
   }
 }
 
-class PlayerScreen extends StatelessWidget {
+class PlayerScreen extends StatefulWidget {
   const PlayerScreen({super.key});
+
+  @override
+  State<PlayerScreen> createState() => _PlayerScreenState();
+}
+
+class _PlayerScreenState extends State<PlayerScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  StreamSubscription<bool>? _playingSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 20), // Quay 1 vòng hết 20 giây
+    );
+
+    // Lắng nghe trạng thái phát nhạc để điều khiển đĩa quay
+    final player = AudioManager().player;
+    _playingSubscription = player.playingStream.listen((playing) {
+      if (playing) {
+        _controller.repeat();
+      } else {
+        _controller.stop();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _playingSubscription?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -575,36 +611,46 @@ class PlayerScreen extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Expanded(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.grey[900],
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.5),
-                            blurRadius: 30,
-                            offset: const Offset(0, 15),
+                    child: RotationTransition(
+                      turns: _controller,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.grey[900],
+                          shape: BoxShape.circle, // Chuyển thành hình tròn
+                          border: Border.all(
+                            color: Colors.black,
+                            width: 8,
+                          ), // Viền đĩa nhạc
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.5),
+                              blurRadius: 30,
+                              offset: const Offset(0, 15),
+                            ),
+                          ],
+                        ),
+                        child: ClipOval(
+                          // Cắt ảnh theo hình tròn
+                          child: Center(
+                            child: isCustom
+                                ? const Icon(
+                                    Icons.music_note,
+                                    size: 120,
+                                    color: Colors.white54,
+                                  )
+                                : QueryArtworkWidget(
+                                    id: song.id,
+                                    type: ArtworkType.AUDIO,
+                                    artworkHeight: 300,
+                                    artworkWidth: 300,
+                                    nullArtworkWidget: const Icon(
+                                      Icons.music_note,
+                                      size: 120,
+                                      color: Colors.white54,
+                                    ),
+                                  ),
                           ),
-                        ],
-                      ),
-                      child: Center(
-                        child: isCustom
-                            ? const Icon(
-                                Icons.music_note,
-                                size: 120,
-                                color: Colors.white54,
-                              )
-                            : QueryArtworkWidget(
-                                id: song.id,
-                                type: ArtworkType.AUDIO,
-                                artworkHeight: 300,
-                                artworkWidth: 300,
-                                nullArtworkWidget: const Icon(
-                                  Icons.music_note,
-                                  size: 120,
-                                  color: Colors.white54,
-                                ),
-                              ),
+                        ),
                       ),
                     ),
                   ),
