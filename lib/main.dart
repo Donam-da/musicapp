@@ -375,7 +375,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
           ),
           subtitle: Text(
             (song.artist == null || song.artist == '<unknown>')
-                ? song.data
+                ? File(song.data).parent.path
                 : song.artist!,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -760,10 +760,12 @@ class _PlayerScreenState extends State<PlayerScreen>
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
-                  if (!isCustom) ...[
+                  if (!isCustom &&
+                      song.artist != null &&
+                      song.artist != '<unknown>') ...[
                     const SizedBox(height: 8),
                     Text(
-                      song.artist ?? "Unknown",
+                      song.artist!,
                       style: const TextStyle(
                         fontSize: 18,
                         color: Colors.white70,
@@ -1173,7 +1175,7 @@ class SongSearchDelegate extends SearchDelegate {
           title: Text(song.title, style: const TextStyle(color: Colors.white)),
           subtitle: Text(
             (song.artist == null || song.artist == '<unknown>')
-                ? song.data
+                ? File(song.data).parent.path
                 : song.artist!,
             style: const TextStyle(color: Colors.white70),
             maxLines: 1,

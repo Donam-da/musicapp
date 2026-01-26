@@ -1,5 +1,6 @@
 import 'package:just_audio/just_audio.dart';
 import 'package:on_audio_query/on_audio_query.dart';
+import 'package:audio_session/audio_session.dart';
 
 class AudioManager {
   // Singleton pattern
@@ -7,6 +8,7 @@ class AudioManager {
   factory AudioManager() => _instance;
 
   AudioManager._internal() {
+    _initAudioSession();
     // Lắng nghe trạng thái player để tự động xử lý khi bài hát kết thúc
     // Đảm bảo nhạc luôn phát tiếp (theo chế độ đã chọn) thay vì dừng lại
     player.playerStateStream.listen((state) {
@@ -26,6 +28,11 @@ class AudioManager {
         }
       }
     });
+  }
+
+  Future<void> _initAudioSession() async {
+    final session = await AudioSession.instance;
+    await session.configure(const AudioSessionConfiguration.music());
   }
 
   final AudioPlayer player = AudioPlayer();
