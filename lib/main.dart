@@ -39,6 +39,8 @@ class LibraryScreen extends StatefulWidget {
 class _LibraryScreenState extends State<LibraryScreen> {
   bool _hasPermission = false;
   List<SongModel>? _selectedSongs;
+  List<SongModel> _librarySongs = [];
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -52,8 +54,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
     final audioStatus = await Permission.audio.request(); // Cho Android 13+
 
     if (status.isGranted || audioStatus.isGranted) {
+      final songs = await AudioManager().getSongs();
       setState(() {
         _hasPermission = true;
+        _librarySongs = songs;
+        _isLoading = false;
       });
     }
   }
@@ -102,23 +107,28 @@ class _LibraryScreenState extends State<LibraryScreen> {
           ? const Center(child: Text("Vui lòng cấp quyền truy cập để tải nhạc"))
           : _selectedSongs != null
           ? _buildSongList(_selectedSongs!, isCustomFile: true)
-          : FutureBuilder<List<SongModel>>(
-              future: AudioManager().getSongs(),
-              builder: (context, snapshot) {
-                if (snapshot.data == null) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snapshot.data!.isEmpty) {
-                  return const Center(
-                    child: Text("Không tìm thấy bài hát nào"),
-                  );
-                }
-
-                final songs = snapshot.data!;
-                return _buildSongList(songs);
-              },
-            ),
+          : _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _librarySongs.isEmpty
+          ? const Center(child: Text("Không tìm thấy bài hát nào"))
+          : _buildSongList(_librarySongs),
       bottomNavigationBar: const MiniPlayer(),
+    );
+  }
+
+  void _deleteSong(SongModel song, bool isCustomFile) {
+    setState(() {
+      if (isCustomFile) {
+        _selectedSongs?.remove(song);
+        if (_selectedSongs?.isEmpty ?? false) {
+          _selectedSongs = null; // Quay về danh sách thư viện nếu xóa hết
+        }
+      } else {
+        _librarySongs.remove(song);
+      }
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Đã ẩn bài hát khỏi danh sách")),
     );
   }
 
@@ -158,9 +168,48 @@ class _LibraryScreenState extends State<LibraryScreen> {
             style: const TextStyle(fontWeight: FontWeight.w500),
           ),
           subtitle: Text(song.artist ?? "Unknown", maxLines: 1),
-          trailing: IconButton(
-            icon: const Icon(Icons.more_vert),
-            onPressed: () {},
+          trailing: PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'delete') {
+                showDialog(
+                  context: context,
+                  builder: (context) => AlertDialog(
+                    title: const Text("Xác nhận xóa"),
+                    content: Text(
+                      "Bạn có chắc muốn xóa bài hát '${song.title}'?",
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text("Hủy"),
+                      ),
+                      TextButton(
+                        onPressed: () {
+                          Navigator.pop(context);
+                          _deleteSong(song, isCustomFile);
+                        },
+                        child: const Text(
+                          "Xóa",
+                          style: TextStyle(color: Colors.red),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete, color: Colors.red),
+                    SizedBox(width: 8),
+                    Text("Xóa"),
+                  ],
+                ),
+              ),
+            ],
           ),
           onTap: () {
             AudioManager().playSong(songs, index);
