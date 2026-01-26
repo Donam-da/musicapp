@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:just_audio/just_audio.dart';
@@ -137,6 +138,61 @@ class _LibraryScreenState extends State<LibraryScreen> {
     );
   }
 
+  void _showSongInfo(SongModel song) async {
+    final file = File(song.data);
+    String sizeString = "Không xác định";
+    String dateString = "Không xác định";
+
+    if (await file.exists()) {
+      final stat = await file.stat();
+      final sizeMb = stat.size / (1024 * 1024);
+      sizeString = "${sizeMb.toStringAsFixed(2)} MB";
+      // Định dạng ngày tháng đơn giản (YYYY-MM-DD HH:MM:SS)
+      dateString = stat.modified.toString().split('.')[0];
+    }
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Thông tin file"),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildInfoRow("Tên file:", song.title),
+            const SizedBox(height: 8),
+            _buildInfoRow("Kích thước:", sizeString),
+            const SizedBox(height: 8),
+            _buildInfoRow("Vị trí gốc:", song.data),
+            const SizedBox(height: 8),
+            _buildInfoRow("Ngày cập nhật:", dateString),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Đóng"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoRow(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+        ),
+        Text(value, style: const TextStyle(fontSize: 14)),
+      ],
+    );
+  }
+
   Widget _buildSongList(List<SongModel> songs, {bool isCustomFile = false}) {
     return ListView.builder(
       itemCount: songs.length,
@@ -179,6 +235,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
           subtitle: Text(song.artist ?? "Unknown", maxLines: 1),
           trailing: PopupMenuButton<String>(
             onSelected: (value) {
+              if (value == 'info') {
+                _showSongInfo(song);
+              }
               if (value == 'delete') {
                 showDialog(
                   context: context,
@@ -208,6 +267,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
               }
             },
             itemBuilder: (context) => [
+              const PopupMenuItem(
+                value: 'info',
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.blue),
+                    SizedBox(width: 8),
+                    Text("Thông tin"),
+                  ],
+                ),
+              ),
               const PopupMenuItem(
                 value: 'delete',
                 child: Row(
