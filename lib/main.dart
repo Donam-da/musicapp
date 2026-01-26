@@ -81,11 +81,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
             ); // Kiểm tra log xem có đường dẫn không
             final songs = paths.map((path) {
               final fileName = path.split(RegExp(r'[/\\]')).last;
+              String directory = path;
+              final lastSeparator = path.lastIndexOf(RegExp(r'[/\\]'));
+              if (lastSeparator != -1) {
+                directory = path.substring(0, lastSeparator);
+              }
               return SongModel({
                 "_id": path.hashCode,
                 "_data": path,
                 "title": fileName,
-                "artist": "Tệp tùy chọn",
+                "artist": directory,
+                "genre": "CustomFile",
               });
             }).toList();
 
@@ -164,7 +170,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
             song.title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w500),
+            style: const TextStyle(
+              fontWeight: FontWeight.w500,
+              fontSize: 24,
+              color: Colors.cyan,
+            ),
           ),
           subtitle: Text(song.artist ?? "Unknown", maxLines: 1),
           trailing: PopupMenuButton<String>(
@@ -235,7 +245,7 @@ class MiniPlayer extends StatelessWidget {
         final state = snapshot.data;
         if (state?.currentSource == null) return const SizedBox.shrink();
         final song = state!.currentSource!.tag as SongModel;
-        final isCustom = song.artist == "Tệp tùy chọn";
+        final isCustom = song.genre == "CustomFile";
 
         return GestureDetector(
           onTap: () {
@@ -279,12 +289,9 @@ class MiniPlayer extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
                                   fontWeight: FontWeight.bold,
+                                  fontSize: 24,
+                                  color: Colors.cyan,
                                 ),
-                              ),
-                              Text(
-                                song.artist ?? "Unknown",
-                                maxLines: 1,
-                                style: const TextStyle(fontSize: 12),
                               ),
                             ],
                           ),
@@ -381,7 +388,7 @@ class PlayerScreen extends StatelessWidget {
           final state = snapshot.data;
           if (state?.currentSource == null) return const SizedBox.shrink();
           final song = state!.currentSource!.tag as SongModel;
-          final isCustom = song.artist == "Tệp tùy chọn";
+          final isCustom = song.genre == "CustomFile";
 
           return Container(
             decoration: BoxDecoration(
