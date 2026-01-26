@@ -38,4 +38,28 @@ class AudioManager {
       print("Lỗi phát nhạc: $e");
     }
   }
+
+  // Phát danh sách các file được chọn từ FilePicker
+  Future<void> playLocalFiles(List<String> filePaths) async {
+    try {
+      final playlist = ConcatenatingAudioSource(
+        children: filePaths.map((path) {
+          // Tạo SongModel giả lập từ đường dẫn file để UI hiển thị được tên
+          final fileName = path.split('/').last;
+          final song = SongModel({
+            "_id": path.hashCode,
+            "_data": path,
+            "title": fileName,
+            "artist": "Tệp tùy chọn",
+          });
+
+          return AudioSource.uri(Uri.file(path), tag: song);
+        }).toList(),
+      );
+      await player.setAudioSource(playlist);
+      player.play();
+    } catch (e) {
+      print("Lỗi phát file tùy chọn: $e");
+    }
+  }
 }

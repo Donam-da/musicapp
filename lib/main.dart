@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -59,6 +60,22 @@ class _LibraryScreenState extends State<LibraryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      floatingActionButton: FloatingActionButton(
+        onPressed: () async {
+          // Mở trình chọn file
+          FilePickerResult? result = await FilePicker.platform.pickFiles(
+            type: FileType.audio, // Chỉ chọn file âm thanh
+            allowMultiple: true, // Cho phép chọn nhiều file
+          );
+
+          if (result != null) {
+            // Lấy danh sách đường dẫn và phát nhạc
+            List<String> paths = result.paths.whereType<String>().toList();
+            AudioManager().playLocalFiles(paths);
+          }
+        },
+        child: const Icon(Icons.add),
+      ),
       appBar: AppBar(
         title: const Text('Thư viện nhạc'),
         centerTitle: true,
