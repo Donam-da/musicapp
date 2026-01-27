@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import 'package:audio_session/audio_session.dart';
@@ -75,7 +76,7 @@ class AudioManager {
       await player.setAudioSource(playlist, initialIndex: initialIndex);
       await player.play(); // Đợi lệnh play thực hiện xong để bắt lỗi nếu có
     } catch (e) {
-      print("Lỗi phát nhạc: $e");
+      debugPrint("Lỗi phát nhạc: $e");
     }
   }
 
@@ -99,7 +100,7 @@ class AudioManager {
       await player.setAudioSource(playlist);
       player.play();
     } catch (e) {
-      print("Lỗi phát file tùy chọn: $e");
+      debugPrint("Lỗi phát file tùy chọn: $e");
     }
   }
 }
