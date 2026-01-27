@@ -257,6 +257,42 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }).toList();
   }
 
+  // Hàm chọn thư mục tùy chỉnh để khắc phục lỗi trên Android 14
+  Future<void> _pickFolder() async {
+    if (Platform.isAndroid) {
+      // Đảm bảo quyền quản lý file đã được cấp
+      if (await Permission.manageExternalStorage.status.isDenied) {
+        await Permission.manageExternalStorage.request();
+      }
+
+      if (!mounted) return;
+
+      // Mở màn hình chọn thư mục tự tạo
+      final String? path = await Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const FolderPickerScreen()),
+      );
+
+      if (path != null) {
+        _fetchFolderSongs(path);
+        _saveMode();
+      }
+    } else {
+      // Fallback cho các nền tảng khác (nếu có)
+      try {
+        String? path = await FilePicker.platform.getDirectoryPath(
+          lockParentWindow: true,
+        );
+        if (path != null) {
+          _fetchFolderSongs(path);
+          _saveMode();
+        }
+      } catch (e) {
+        debugPrint("Lỗi chọn thư mục: $e");
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -339,26 +375,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
             )
           : (_libraryMode == LibraryMode.folder
                 ? FloatingActionButton(
-                    onPressed: () async {
-                      try {
-                        String? path = await FilePicker.platform
-                            .getDirectoryPath(lockParentWindow: true);
-                        if (path != null) {
-                          _fetchFolderSongs(path);
-                          _saveMode();
-                        } else {
-                          // Người dùng hủy chọn hoặc hệ thống chặn
-                          debugPrint("Không chọn được thư mục (path = null)");
-                        }
-                      } catch (e) {
-                        debugPrint("Lỗi chọn thư mục: $e");
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text("Lỗi mở chọn thư mục: $e")),
-                          );
-                        }
-                      }
-                    },
+                    onPressed: _pickFolder,
                     tooltip: "Chọn thư mục khác",
                     child: const Icon(Icons.folder_open),
                   )
@@ -895,6 +912,128 @@ class _LibraryScreenState extends State<LibraryScreen> {
           ),
         );
       },
+    );
+  }
+}
+
+// Màn hình chọn thư mục thủ công cho Android (Khắc phục lỗi FilePicker)
+class FolderPickerScreen extends StatefulWidget {
+  const FolderPickerScreen({super.key});
+
+  @override
+  State<FolderPickerScreen> createState() => _FolderPickerScreenState();
+}
+
+class _FolderPickerScreenState extends State<FolderPickerScreen> {
+  Directory _currentDir = Directory('/storage/emulated/0');
+  List<FileSystemEntity> _dirs = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    try {
+      final List<FileSystemEntity> dirs = [];
+      if (await _currentDir.exists()) {
+        await for (final entity in _currentDir.list(followLinks: false)) {
+          if (entity is Directory) {
+            // Bỏ qua các thư mục ẩn (bắt đầu bằng dấu chấm)
+            if (!entity.path
+                .split(Platform.pathSeparator)
+                .last
+                .startsWith('.')) {
+              dirs.add(entity);
+            }
+          }
+        }
+      }
+      // Sắp xếp theo tên A-Z
+      dirs.sort((a, b) => a.path.toLowerCase().compareTo(b.path.toLowerCase()));
+
+      if (mounted) {
+        setState(() {
+          _dirs = dirs;
+        });
+      }
+    } catch (e) {
+      debugPrint("Lỗi đọc thư mục: $e");
+    }
+  }
+
+  void _navigate(Directory dir) {
+    setState(() {
+      _currentDir = dir;
+      _dirs = [];
+    });
+    _refresh();
+  }
+
+  void _goUp() {
+    final parent = _currentDir.parent;
+    // Nếu đã ở thư mục gốc bộ nhớ trong (/storage/emulated/0) thì thoát
+    if (parent.path == _currentDir.path ||
+        _currentDir.path == '/storage/emulated/0') {
+      Navigator.pop(context);
+      return;
+    }
+    _navigate(parent);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Chọn thư mục nhạc"),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: _goUp,
+        ),
+      ),
+      body: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            width: double.infinity,
+            child: Text(
+              _currentDir.path,
+              style: const TextStyle(color: Colors.white70),
+            ),
+          ),
+          Expanded(
+            child: _dirs.isEmpty
+                ? const Center(
+                    child: Text(
+                      "Thư mục trống",
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: _dirs.length,
+                    itemBuilder: (context, index) {
+                      final dir = _dirs[index];
+                      final name = dir.path.split(Platform.pathSeparator).last;
+                      return ListTile(
+                        leading: const Icon(Icons.folder, color: Colors.amber),
+                        title: Text(
+                          name,
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        onTap: () => _navigate(dir as Directory),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => Navigator.pop(context, _currentDir.path),
+        label: const Text("Chọn thư mục này"),
+        icon: const Icon(Icons.check),
+      ),
     );
   }
 }
