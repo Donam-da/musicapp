@@ -947,11 +947,29 @@ class _FolderPickerScreenState extends State<FolderPickerScreen> {
                 .startsWith('.')) {
               dirs.add(entity);
             }
+          } else if (entity is File) {
+            // Hiển thị thêm file nhạc/video để người dùng biết thư mục có nội dung
+            final ext = entity.path.split('.').last.toLowerCase();
+            if ([
+              'mp3',
+              'wav',
+              'm4a',
+              'flac',
+              'ogg',
+              'aac',
+              'mp4',
+            ].contains(ext)) {
+              dirs.add(entity);
+            }
           }
         }
       }
-      // Sắp xếp theo tên A-Z
-      dirs.sort((a, b) => a.path.toLowerCase().compareTo(b.path.toLowerCase()));
+      // Sắp xếp: Thư mục lên đầu, sau đó đến file, theo tên A-Z
+      dirs.sort((a, b) {
+        if (a is Directory && b is File) return -1;
+        if (a is File && b is Directory) return 1;
+        return a.path.toLowerCase().compareTo(b.path.toLowerCase());
+      });
 
       if (mounted) {
         setState(() {
@@ -1016,13 +1034,22 @@ class _FolderPickerScreenState extends State<FolderPickerScreen> {
                     itemBuilder: (context, index) {
                       final dir = _dirs[index];
                       final name = dir.path.split(Platform.pathSeparator).last;
+                      final isDirectory = dir is Directory;
+                      final isVideo = name.toLowerCase().endsWith('.mp4');
+
                       return ListTile(
-                        leading: const Icon(Icons.folder, color: Colors.amber),
+                        leading: Icon(
+                          isDirectory
+                              ? Icons.folder
+                              : (isVideo ? Icons.movie : Icons.music_note),
+                          color: isDirectory ? Colors.amber : Colors.white70,
+                        ),
                         title: Text(
                           name,
                           style: const TextStyle(color: Colors.white),
                         ),
-                        onTap: () => _navigate(dir as Directory),
+                        // Chỉ cho phép ấn vào thư mục để đi tiếp, file chỉ để hiển thị
+                        onTap: isDirectory ? () => _navigate(dir) : null,
                       );
                     },
                   ),
