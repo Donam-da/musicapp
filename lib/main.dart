@@ -926,10 +926,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     height: 50,
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: [
-                          Colors.deepPurple.shade400,
-                          Colors.blue.shade400,
-                        ],
+                        colors: isVideo
+                            ? [Colors.teal.shade400, Colors.cyan.shade700]
+                            : [
+                                Colors.pinkAccent.shade100,
+                                Colors.deepPurpleAccent.shade400,
+                              ],
                         begin: Alignment.topLeft,
                         end: Alignment.bottomRight,
                       ),
@@ -947,8 +949,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
-                            Colors.deepPurple.shade400,
-                            Colors.blue.shade400,
+                            Colors.pinkAccent.shade100,
+                            Colors.deepPurpleAccent.shade400,
                           ],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
@@ -1194,7 +1196,11 @@ class _FolderPickerScreenState extends State<FolderPickerScreen> {
                           isDirectory
                               ? Icons.folder
                               : (isVideo ? Icons.movie : Icons.music_note),
-                          color: isDirectory ? Colors.amber : Colors.white70,
+                          color: isDirectory
+                              ? Colors.amber
+                              : (isVideo
+                                    ? Colors.cyanAccent
+                                    : Colors.pinkAccent),
                         ),
                         title: Text(
                           name,
@@ -1271,10 +1277,20 @@ class MiniPlayer extends StatelessWidget {
                           child: isCustom
                               ? Padding(
                                   padding: const EdgeInsets.all(8.0),
-                                  child: Icon(
-                                    isVideo ? Icons.movie : Icons.music_note,
-                                    size: 32,
-                                    color: Colors.white,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: isVideo
+                                          ? Colors.teal.withValues(alpha: 0.3)
+                                          : Colors.pink.withValues(alpha: 0.3),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Icon(
+                                      isVideo ? Icons.movie : Icons.music_note,
+                                      size: 32,
+                                      color: isVideo
+                                          ? Colors.cyanAccent
+                                          : Colors.pinkAccent,
+                                    ),
                                   ),
                                 )
                               : QueryArtworkWidget(
@@ -1967,10 +1983,19 @@ class SongSearchDelegate extends SearchDelegate {
                   width: 50,
                   height: 50,
                   decoration: BoxDecoration(
-                    color: Colors.grey[800],
+                    gradient: LinearGradient(
+                      colors: isVideo
+                          ? [Colors.teal.shade400, Colors.cyan.shade700]
+                          : [
+                              Colors.pinkAccent.shade100,
+                              Colors.deepPurpleAccent.shade400,
+                            ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(icon, color: Colors.white),
+                  child: Icon(icon, color: Colors.white, size: 28),
                 )
               : QueryArtworkWidget(
                   id: song.id,
