@@ -38,12 +38,14 @@ class AudioManager {
 
   // Lấy danh sách bài hát từ bộ nhớ máy
   Future<List<SongModel>> getSongs() async {
-    return await audioQuery.querySongs(
+    final songs = await audioQuery.querySongs(
       sortType: SongSortType.DATE_ADDED,
       orderType: OrderType.DESC_OR_GREATER,
       uriType: UriType.EXTERNAL,
       ignoreCase: true,
     );
+
+    return songs;
   }
 
   // Thiết lập danh sách phát và phát bài hát tại index được chọn

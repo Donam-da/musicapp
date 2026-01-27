@@ -10,6 +10,8 @@ import 'audio_manager.dart';
 
 enum LibraryMode { manual, device, folder }
 
+enum FileFilter { all, mp3, mp4 }
+
 void main() {
   runApp(const MusicApp());
 }
@@ -49,6 +51,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   bool _isLoading = true;
   LibraryMode _libraryMode = LibraryMode.manual;
   String? _folderPath;
+  FileFilter _fileFilter = FileFilter.all;
 
   @override
   void initState() {
@@ -63,10 +66,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   Future<void> requestPermission() async {
     // Yêu cầu quyền và kiểm tra kết quả
-    final status = await Permission.storage.request();
-    final audioStatus = await Permission.audio.request(); // Cho Android 13+
+    // Xin quyền Storage (Android <13) và Audio/Video (Android 13+)
+    Map<Permission, PermissionStatus> statuses = await [
+      Permission.storage,
+      Permission.audio,
+      Permission.videos,
+    ].request();
 
-    if (status.isGranted || audioStatus.isGranted) {
+    if (statuses[Permission.storage]!.isGranted ||
+        statuses[Permission.audio]!.isGranted ||
+        statuses[Permission.videos]!.isGranted) {
       setState(() {
         _hasPermission = true;
       });
@@ -112,12 +121,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
           })
           .map((file) {
             final fileName = file.path.split(RegExp(r'[/\\]')).last;
+            final isMp4 = fileName.toLowerCase().endsWith('.mp4');
             return SongModel({
               "_id": file.path.hashCode,
               "_data": file.path,
               "title": fileName,
               "artist": path.split(RegExp(r'[/\\]')).last,
-              "genre": "FolderFile",
+              "genre": isMp4 ? "VideoFile" : "FolderFile",
             });
           })
           .toList();
@@ -158,12 +168,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
         if (lastSeparator != -1) {
           directory = path.substring(0, lastSeparator);
         }
+        final isMp4 = path.toLowerCase().endsWith('.mp4');
         return SongModel({
           "_id": path.hashCode,
           "_data": path,
           "title": fileName,
           "artist": directory,
-          "genre": "CustomFile",
+          "genre": isMp4 ? "VideoFile" : "CustomFile",
         });
       }).toList();
     }
@@ -205,6 +216,16 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
+  List<SongModel> _getFilteredSongs(List<SongModel> songs) {
+    if (_fileFilter == FileFilter.all) return songs;
+    return songs.where((song) {
+      final path = song.data.toLowerCase();
+      if (_fileFilter == FileFilter.mp3) return path.endsWith('.mp3');
+      if (_fileFilter == FileFilter.mp4) return path.endsWith('.mp4');
+      return true;
+    }).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -241,12 +262,13 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     if (lastSeparator != -1) {
                       directory = path.substring(0, lastSeparator);
                     }
+                    final isMp4 = path.toLowerCase().endsWith('.mp4');
                     return SongModel({
                       "_id": path.hashCode,
                       "_data": path,
                       "title": fileName,
                       "artist": directory,
-                      "genre": "CustomFile",
+                      "genre": isMp4 ? "VideoFile" : "CustomFile",
                     });
                   }).toList();
 
@@ -296,6 +318,30 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   )
                 : null),
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.radar),
+          tooltip: "Cập nhật danh sách",
+          onPressed: () {
+            if (_libraryMode == LibraryMode.device) {
+              _fetchDeviceSongs();
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Đang quét lại thiết bị...")),
+              );
+            } else if (_libraryMode == LibraryMode.folder &&
+                _folderPath != null) {
+              _fetchFolderSongs(_folderPath!);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Đang cập nhật thư mục...")),
+              );
+            } else {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text("Chế độ thủ công không cần cập nhật"),
+                ),
+              );
+            }
+          },
+        ),
         title: Text(
           _libraryMode == LibraryMode.device
               ? 'Toàn bộ thiết bị'
@@ -307,6 +353,31 @@ class _LibraryScreenState extends State<LibraryScreen> {
         ),
         centerTitle: true,
         actions: [
+          if (_libraryMode != LibraryMode.manual)
+            PopupMenuButton<FileFilter>(
+              icon: const Icon(Icons.filter_list),
+              tooltip: "Lọc định dạng",
+              onSelected: (FileFilter result) {
+                setState(() {
+                  _fileFilter = result;
+                });
+              },
+              itemBuilder: (BuildContext context) =>
+                  <PopupMenuEntry<FileFilter>>[
+                    const PopupMenuItem<FileFilter>(
+                      value: FileFilter.all,
+                      child: Text('Tất cả'),
+                    ),
+                    const PopupMenuItem<FileFilter>(
+                      value: FileFilter.mp3,
+                      child: Text('Chỉ MP3'),
+                    ),
+                    const PopupMenuItem<FileFilter>(
+                      value: FileFilter.mp4,
+                      child: Text('Chỉ MP4'),
+                    ),
+                  ],
+            ),
           PopupMenuButton<LibraryMode>(
             icon: Icon(_getModeIcon()),
             tooltip: "Chuyển chế độ",
@@ -395,7 +466,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 ? const Center(
                     child: Text("Không tìm thấy bài hát nào trên máy"),
                   )
-                : _buildSongList(_librarySongs))
+                : _buildSongList(_getFilteredSongs(_librarySongs)))
           : (_libraryMode == LibraryMode.folder
                 ? (_folderSongs.isEmpty
                       ? Center(
@@ -405,7 +476,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                 : "Thư mục trống",
                           ),
                         )
-                      : _buildSongList(_folderSongs, isCustomFile: true))
+                      : _buildSongList(
+                          _getFilteredSongs(_folderSongs),
+                          isCustomFile: true,
+                        ))
                 : (_selectedSongs == null || _selectedSongs!.isEmpty
                       ? const Center(child: Text("Nhấn nút + để thêm bài hát"))
                       : _buildSongList(_selectedSongs!, isCustomFile: true))),
@@ -505,6 +579,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
       itemCount: songs.length,
       itemBuilder: (context, index) {
         final song = songs[index];
+        final isVideo = song.genre == "VideoFile";
+        final icon = isVideo ? Icons.movie : Icons.music_note;
         return ListTile(
           leading: isCustomFile
               ? Container(
@@ -514,7 +590,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     color: Colors.grey[800],
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.music_note, color: Colors.white),
+                  child: Icon(icon, color: Colors.white),
                 )
               : QueryArtworkWidget(
                   id: song.id,
@@ -627,7 +703,11 @@ class MiniPlayer extends StatelessWidget {
         final state = snapshot.data;
         if (state?.currentSource == null) return const SizedBox.shrink();
         final song = state!.currentSource!.tag as SongModel;
-        final isCustom = song.genre == "CustomFile";
+        final isCustom =
+            song.genre == "CustomFile" ||
+            song.genre == "FolderFile" ||
+            song.genre == "VideoFile";
+        final isVideo = song.genre == "VideoFile";
 
         return GestureDetector(
           onTap: () {
@@ -650,7 +730,10 @@ class MiniPlayer extends StatelessWidget {
                     child: Row(
                       children: [
                         isCustom
-                            ? const Icon(Icons.music_note, size: 40)
+                            ? Icon(
+                                isVideo ? Icons.movie : Icons.music_note,
+                                size: 40,
+                              )
                             : QueryArtworkWidget(
                                 id: song.id,
                                 type: ArtworkType.AUDIO,
@@ -855,7 +938,11 @@ class _PlayerScreenState extends State<PlayerScreen>
           final state = snapshot.data;
           if (state?.currentSource == null) return const SizedBox.shrink();
           final song = state!.currentSource!.tag as SongModel;
-          final isCustom = song.genre == "CustomFile";
+          final isCustom =
+              song.genre == "CustomFile" ||
+              song.genre == "FolderFile" ||
+              song.genre == "VideoFile";
+          final isVideo = song.genre == "VideoFile";
 
           return Container(
             decoration: BoxDecoration(
@@ -893,8 +980,8 @@ class _PlayerScreenState extends State<PlayerScreen>
                           // Cắt ảnh theo hình tròn
                           child: Center(
                             child: isCustom
-                                ? const Icon(
-                                    Icons.music_note,
+                                ? Icon(
+                                    isVideo ? Icons.movie : Icons.music_note,
                                     size: 120,
                                     color: Colors.white54,
                                   )
@@ -1314,6 +1401,8 @@ class SongSearchDelegate extends SearchDelegate {
       itemCount: suggestions.length,
       itemBuilder: (context, index) {
         final song = suggestions[index];
+        final isVideo = song.genre == "VideoFile";
+        final icon = isVideo ? Icons.movie : Icons.music_note;
         return ListTile(
           leading: isCustomFile
               ? Container(
@@ -1323,7 +1412,7 @@ class SongSearchDelegate extends SearchDelegate {
                     color: Colors.grey[800],
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Icon(Icons.music_note, color: Colors.white),
+                  child: Icon(icon, color: Colors.white),
                 )
               : QueryArtworkWidget(
                   id: song.id,
