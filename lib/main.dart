@@ -378,31 +378,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
           : (_libraryMode == LibraryMode.manual
                 ? FloatingActionButton(
                     onPressed: () async {
-                      // Mở trình chọn file
-                      FilePickerResult? result = await FilePicker.platform
-                          .pickFiles(
-                            type: FileType.custom,
-                            allowedExtensions: [
-                              'mp3',
-                              'wav',
-                              'm4a',
-                              'flac',
-                              'ogg',
-                              'aac',
-                              'mp4',
-                            ],
-                            allowMultiple: true, // Cho phép chọn nhiều file
-                          );
+                      final List<String>? paths = await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const FilePickerCustomScreen(),
+                        ),
+                      );
 
-                      if (result != null) {
+                      if (paths != null && paths.isNotEmpty) {
                         setState(() {
                           _isAddingFiles = true;
                           _addingProgress = 0.0;
                         });
-
-                        List<String> paths = result.paths
-                            .whereType<String>()
-                            .toList();
 
                         List<SongModel> newSongs = [];
                         int totalFiles = paths.length;
@@ -429,7 +416,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
                             }),
                           );
 
-                          // Cập nhật tiến trình và đợi 1 chút để UI kịp vẽ lại
                           setState(() {
                             _addingProgress = (i + 1) / totalFiles;
                           });
@@ -440,17 +426,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
                         int playIndex = 0;
                         setState(() {
-                          // Nối thêm vào danh sách cũ thay vì thay thế
                           if (_selectedSongs != null) {
-                            playIndex = _selectedSongs!
-                                .length; // Vị trí bắt đầu của bài mới
+                            playIndex = _selectedSongs!.length;
                             _selectedSongs!.addAll(newSongs);
                           } else {
                             _selectedSongs = newSongs;
                           }
                           _isAddingFiles = false;
                         });
-                        _saveSelectedSongs(); // Lưu lại danh sách mới
+                        _saveSelectedSongs();
                         AudioManager().playSong(_selectedSongs!, playIndex);
                       }
                     },
@@ -1066,6 +1050,182 @@ class _LibraryScreenState extends State<LibraryScreen> {
           ),
         );
       },
+    );
+  }
+}
+
+// Màn hình chọn tệp thủ công (Tương tự FolderPickerScreen nhưng cho phép chọn nhiều tệp)
+class FilePickerCustomScreen extends StatefulWidget {
+  const FilePickerCustomScreen({super.key});
+
+  @override
+  State<FilePickerCustomScreen> createState() => _FilePickerCustomScreenState();
+}
+
+class _FilePickerCustomScreenState extends State<FilePickerCustomScreen> {
+  Directory _currentDir = Directory('/storage/emulated/0');
+  List<FileSystemEntity> _dirs = [];
+  final Set<String> _selectedFiles = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    try {
+      final List<FileSystemEntity> dirs = [];
+      if (await _currentDir.exists()) {
+        await for (final entity in _currentDir.list(followLinks: false)) {
+          if (entity is Directory) {
+            if (!entity.path
+                .split(Platform.pathSeparator)
+                .last
+                .startsWith('.')) {
+              dirs.add(entity);
+            }
+          } else if (entity is File) {
+            final ext = entity.path.split('.').last.toLowerCase();
+            if ([
+              'mp3',
+              'wav',
+              'm4a',
+              'flac',
+              'ogg',
+              'aac',
+              'mp4',
+            ].contains(ext)) {
+              dirs.add(entity);
+            }
+          }
+        }
+      }
+      dirs.sort((a, b) {
+        if (a is Directory && b is File) return -1;
+        if (a is File && b is Directory) return 1;
+        return a.path.toLowerCase().compareTo(b.path.toLowerCase());
+      });
+
+      if (mounted) {
+        setState(() {
+          _dirs = dirs;
+        });
+      }
+    } catch (e) {
+      debugPrint("Lỗi đọc thư mục: $e");
+    }
+  }
+
+  void _navigate(Directory dir) {
+    setState(() {
+      _currentDir = dir;
+      _dirs = [];
+    });
+    _refresh();
+  }
+
+  void _goUp() {
+    final parent = _currentDir.parent;
+    if (parent.path == _currentDir.path ||
+        _currentDir.path == '/storage/emulated/0') {
+      Navigator.pop(context);
+      return;
+    }
+    _navigate(parent);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Chọn tệp nhạc"),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: _goUp,
+        ),
+      ),
+      body: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            width: double.infinity,
+            child: Text(
+              _currentDir.path,
+              style: const TextStyle(color: Colors.white70),
+            ),
+          ),
+          Expanded(
+            child: _dirs.isEmpty
+                ? const Center(
+                    child: Text(
+                      "Thư mục trống",
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: _dirs.length,
+                    itemBuilder: (context, index) {
+                      final entity = _dirs[index];
+                      final name = entity.path
+                          .split(Platform.pathSeparator)
+                          .last;
+                      final isDirectory = entity is Directory;
+                      final isVideo = name.toLowerCase().endsWith('.mp4');
+                      final isSelected = _selectedFiles.contains(entity.path);
+
+                      return ListTile(
+                        leading: Icon(
+                          isDirectory
+                              ? Icons.folder
+                              : (isVideo ? Icons.movie : Icons.music_note),
+                          color: isDirectory
+                              ? Colors.amber
+                              : (isVideo
+                                    ? Colors.cyanAccent
+                                    : Colors.pinkAccent),
+                        ),
+                        title: Text(
+                          name,
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        trailing: isDirectory
+                            ? null
+                            : Checkbox(
+                                value: isSelected,
+                                onChanged: (val) {
+                                  setState(() {
+                                    if (val == true) {
+                                      _selectedFiles.add(entity.path);
+                                    } else {
+                                      _selectedFiles.remove(entity.path);
+                                    }
+                                  });
+                                },
+                              ),
+                        onTap: isDirectory
+                            ? () => _navigate(entity as Directory)
+                            : () {
+                                setState(() {
+                                  if (isSelected) {
+                                    _selectedFiles.remove(entity.path);
+                                  } else {
+                                    _selectedFiles.add(entity.path);
+                                  }
+                                });
+                              },
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => Navigator.pop(context, _selectedFiles.toList()),
+        label: Text("Thêm ${_selectedFiles.length} tệp"),
+        icon: const Icon(Icons.check),
+      ),
     );
   }
 }
