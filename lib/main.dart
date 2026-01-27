@@ -25,11 +25,20 @@ class MusicApp extends StatelessWidget {
       title: 'Music Player',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.deepPurple,
-          brightness: Brightness.dark,
-        ),
         useMaterial3: true,
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: const Color(0xFF121212),
+        colorScheme: const ColorScheme.dark(
+          primary: Colors.deepPurpleAccent,
+          secondary: Colors.tealAccent,
+          surface: Color(0xFF1E1E1E),
+          surfaceContainerHighest: Color(0xFF2C2C2C),
+        ),
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          centerTitle: true,
+        ),
       ),
       home: const LibraryScreen(),
     );
@@ -249,6 +258,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      extendBody: true,
       floatingActionButton: _libraryMode == LibraryMode.manual
           ? FloatingActionButton(
               onPressed: () async {
@@ -385,7 +395,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 child: Text(
                   'Tất cả',
                   style: TextStyle(
-                    color: _fileFilter == FileFilter.all ? Colors.cyan : null,
+                    color: _fileFilter == FileFilter.all
+                        ? Theme.of(context).colorScheme.primary
+                        : null,
                     fontWeight: _fileFilter == FileFilter.all
                         ? FontWeight.bold
                         : null,
@@ -397,7 +409,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 child: Text(
                   'Chỉ MP3',
                   style: TextStyle(
-                    color: _fileFilter == FileFilter.mp3 ? Colors.cyan : null,
+                    color: _fileFilter == FileFilter.mp3
+                        ? Theme.of(context).colorScheme.primary
+                        : null,
                     fontWeight: _fileFilter == FileFilter.mp3
                         ? FontWeight.bold
                         : null,
@@ -409,7 +423,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 child: Text(
                   'Chỉ MP4',
                   style: TextStyle(
-                    color: _fileFilter == FileFilter.mp4 ? Colors.cyan : null,
+                    color: _fileFilter == FileFilter.mp4
+                        ? Theme.of(context).colorScheme.primary
+                        : null,
                     fontWeight: _fileFilter == FileFilter.mp4
                         ? FontWeight.bold
                         : null,
@@ -441,7 +457,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         Icon(
                           Icons.library_music,
                           color: _libraryMode == LibraryMode.manual
-                              ? Colors.cyan
+                              ? Theme.of(context).colorScheme.primary
                               : null,
                         ),
                         const SizedBox(width: 8),
@@ -449,7 +465,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           'Danh sách thủ công',
                           style: TextStyle(
                             color: _libraryMode == LibraryMode.manual
-                                ? Colors.cyan
+                                ? Theme.of(context).colorScheme.primary
                                 : null,
                             fontWeight: _libraryMode == LibraryMode.manual
                                 ? FontWeight.bold
@@ -466,7 +482,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         Icon(
                           Icons.phone_android,
                           color: _libraryMode == LibraryMode.device
-                              ? Colors.cyan
+                              ? Theme.of(context).colorScheme.primary
                               : null,
                         ),
                         const SizedBox(width: 8),
@@ -474,7 +490,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           'Toàn bộ thiết bị',
                           style: TextStyle(
                             color: _libraryMode == LibraryMode.device
-                                ? Colors.cyan
+                                ? Theme.of(context).colorScheme.primary
                                 : null,
                             fontWeight: _libraryMode == LibraryMode.device
                                 ? FontWeight.bold
@@ -491,7 +507,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         Icon(
                           Icons.folder,
                           color: _libraryMode == LibraryMode.folder
-                              ? Colors.cyan
+                              ? Theme.of(context).colorScheme.primary
                               : null,
                         ),
                         const SizedBox(width: 8),
@@ -499,7 +515,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                           'Thư mục',
                           style: TextStyle(
                             color: _libraryMode == LibraryMode.folder
-                                ? Colors.cyan
+                                ? Theme.of(context).colorScheme.primary
                                 : null,
                             fontWeight: _libraryMode == LibraryMode.folder
                                 ? FontWeight.bold
@@ -542,35 +558,51 @@ class _LibraryScreenState extends State<LibraryScreen> {
           ),
         ],
       ),
-      body: !_hasPermission
-          ? const Center(child: Text("Vui lòng cấp quyền truy cập để tải nhạc"))
-          : _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _libraryMode == LibraryMode.device
-          ? (_librarySongs.isEmpty
-                ? const Center(
-                    child: Text("Không tìm thấy bài hát nào trên máy"),
-                  )
-                : _buildSongList(_getFilteredSongs(_librarySongs)))
-          : (_libraryMode == LibraryMode.folder
-                ? (_folderSongs.isEmpty
-                      ? Center(
-                          child: Text(
-                            _folderPath == null
-                                ? "Chưa chọn thư mục. Nhấn nút folder để chọn."
-                                : "Thư mục trống",
-                          ),
-                        )
-                      : _buildSongList(
-                          _getFilteredSongs(_folderSongs),
-                          isCustomFile: true,
-                        ))
-                : (_selectedSongs == null || _selectedSongs!.isEmpty
-                      ? const Center(child: Text("Nhấn nút + để thêm bài hát"))
-                      : _buildSongList(
-                          _getFilteredSongs(_selectedSongs!),
-                          isCustomFile: true,
-                        ))),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              const Color(0xFF121212),
+              Colors.deepPurple.shade900.withValues(alpha: 0.2),
+            ],
+          ),
+        ),
+        child: !_hasPermission
+            ? const Center(
+                child: Text("Vui lòng cấp quyền truy cập để tải nhạc"),
+              )
+            : _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : _libraryMode == LibraryMode.device
+            ? (_librarySongs.isEmpty
+                  ? const Center(
+                      child: Text("Không tìm thấy bài hát nào trên máy"),
+                    )
+                  : _buildSongList(_getFilteredSongs(_librarySongs)))
+            : (_libraryMode == LibraryMode.folder
+                  ? (_folderSongs.isEmpty
+                        ? Center(
+                            child: Text(
+                              _folderPath == null
+                                  ? "Chưa chọn thư mục. Nhấn nút folder để chọn."
+                                  : "Thư mục trống",
+                            ),
+                          )
+                        : _buildSongList(
+                            _getFilteredSongs(_folderSongs),
+                            isCustomFile: true,
+                          ))
+                  : (_selectedSongs == null || _selectedSongs!.isEmpty
+                        ? const Center(
+                            child: Text("Nhấn nút + để thêm bài hát"),
+                          )
+                        : _buildSongList(
+                            _getFilteredSongs(_selectedSongs!),
+                            isCustomFile: true,
+                          ))),
+      ),
       bottomNavigationBar: const MiniPlayer(),
     );
   }
@@ -664,115 +696,149 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   Widget _buildSongList(List<SongModel> songs, {bool isCustomFile = false}) {
     return ListView.builder(
+      padding: const EdgeInsets.only(bottom: 100, top: 10, left: 10, right: 10),
       itemCount: songs.length,
       itemBuilder: (context, index) {
         final song = songs[index];
         final isVideo = song.genre == "VideoFile";
         final icon = isVideo ? Icons.movie : Icons.music_note;
-        return ListTile(
-          leading: (isCustomFile || isVideo)
-              ? Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[800],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(icon, color: Colors.white),
-                )
-              : QueryArtworkWidget(
-                  id: song.id,
-                  type: ArtworkType.AUDIO,
-                  nullArtworkWidget: Container(
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          decoration: BoxDecoration(
+            color: Theme.of(
+              context,
+            ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 4,
+            ),
+            leading: (isCustomFile || isVideo)
+                ? Container(
                     width: 50,
                     height: 50,
                     decoration: BoxDecoration(
-                      color: Colors.grey[800],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(Icons.music_note, color: Colors.white),
-                  ),
-                ),
-          title: Text(
-            song.title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontWeight: FontWeight.w500,
-              fontSize: 24,
-              color: Colors.cyan,
-            ),
-          ),
-          subtitle: Text(
-            (song.artist == null || song.artist == '<unknown>')
-                ? File(song.data).parent.path
-                : song.artist!,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          trailing: PopupMenuButton<String>(
-            onSelected: (value) {
-              if (value == 'info') {
-                _showSongInfo(song);
-              }
-              if (value == 'delete') {
-                showDialog(
-                  context: context,
-                  builder: (context) => AlertDialog(
-                    title: const Text("Xác nhận xóa"),
-                    content: Text(
-                      "Bạn có chắc muốn xóa bài hát '${song.title}'?",
-                    ),
-                    actions: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text("Hủy"),
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.deepPurple.shade400,
+                          Colors.blue.shade400,
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
                       ),
-                      TextButton(
-                        onPressed: () {
-                          Navigator.pop(context);
-                          _deleteSong(song, isCustomFile);
-                        },
-                        child: const Text(
-                          "Xóa",
-                          style: TextStyle(color: Colors.red),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(icon, color: Colors.white),
+                  )
+                : QueryArtworkWidget(
+                    id: song.id,
+                    type: ArtworkType.AUDIO,
+                    artworkBorder: BorderRadius.circular(12),
+                    nullArtworkWidget: Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Colors.deepPurple.shade400,
+                            Colors.blue.shade400,
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
                         ),
+                        borderRadius: BorderRadius.circular(12),
                       ),
+                      child: const Icon(Icons.music_note, color: Colors.white),
+                    ),
+                  ),
+            title: Text(
+              song.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 16,
+                color: Colors.white,
+              ),
+            ),
+            subtitle: Text(
+              (song.artist == null || song.artist == '<unknown>')
+                  ? File(song.data).parent.path
+                  : song.artist!,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.6),
+                fontSize: 13,
+              ),
+            ),
+            trailing: PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert, color: Colors.white70),
+              onSelected: (value) {
+                if (value == 'info') {
+                  _showSongInfo(song);
+                }
+                if (value == 'delete') {
+                  showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text("Xác nhận xóa"),
+                      content: Text(
+                        "Bạn có chắc muốn xóa bài hát '${song.title}'?",
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text("Hủy"),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _deleteSong(song, isCustomFile);
+                          },
+                          child: const Text(
+                            "Xóa",
+                            style: TextStyle(color: Colors.red),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'info',
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, color: Colors.blue),
+                      SizedBox(width: 8),
+                      Text("Thông tin"),
                     ],
                   ),
-                );
-              }
+                ),
+                const PopupMenuItem(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete, color: Colors.red),
+                      SizedBox(width: 8),
+                      Text("Xóa"),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            onTap: () {
+              AudioManager().playSong(songs, index);
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const PlayerScreen()),
+              );
             },
-            itemBuilder: (context) => [
-              const PopupMenuItem(
-                value: 'info',
-                child: Row(
-                  children: [
-                    Icon(Icons.info_outline, color: Colors.blue),
-                    SizedBox(width: 8),
-                    Text("Thông tin"),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'delete',
-                child: Row(
-                  children: [
-                    Icon(Icons.delete, color: Colors.red),
-                    SizedBox(width: 8),
-                    Text("Xóa"),
-                  ],
-                ),
-              ),
-            ],
           ),
-          onTap: () {
-            AudioManager().playSong(songs, index);
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const PlayerScreen()),
-            );
-          },
         );
       },
     );
@@ -805,10 +871,18 @@ class MiniPlayer extends StatelessWidget {
             );
           },
           child: Container(
-            height: 72,
+            height: 75,
+            margin: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              border: const Border(top: BorderSide(color: Colors.white10)),
+              color: const Color(0xFF252525),
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.3),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
             child: Column(
               children: [
@@ -817,19 +891,34 @@ class MiniPlayer extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 16.0),
                     child: Row(
                       children: [
-                        isCustom
-                            ? Icon(
-                                isVideo ? Icons.movie : Icons.music_note,
-                                size: 40,
-                              )
-                            : QueryArtworkWidget(
-                                id: song.id,
-                                type: ArtworkType.AUDIO,
-                                nullArtworkWidget: const Icon(
-                                  Icons.album,
-                                  size: 40,
+                        Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(8),
+                            color: Colors.grey[800],
+                          ),
+                          child: isCustom
+                              ? Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: Icon(
+                                    isVideo ? Icons.movie : Icons.music_note,
+                                    size: 32,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : QueryArtworkWidget(
+                                  id: song.id,
+                                  type: ArtworkType.AUDIO,
+                                  artworkBorder: BorderRadius.circular(8),
+                                  nullArtworkWidget: const Padding(
+                                    padding: EdgeInsets.all(8.0),
+                                    child: Icon(
+                                      Icons.music_note,
+                                      size: 32,
+                                      color: Colors.white,
+                                    ),
+                                  ),
                                 ),
-                              ),
+                        ),
                         const SizedBox(width: 12),
                         Expanded(
                           child: Column(
@@ -841,9 +930,9 @@ class MiniPlayer extends StatelessWidget {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 24,
-                                  color: Colors.cyan,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 16,
+                                  color: Colors.white,
                                 ),
                               ),
                             ],
@@ -921,10 +1010,13 @@ class MiniPlayer extends StatelessWidget {
                     }
                     return LinearProgressIndicator(
                       value: value,
-                      minHeight: 2.0,
+                      minHeight: 3.0,
                       backgroundColor: Colors.transparent,
                       valueColor: AlwaysStoppedAnimation<Color>(
                         Theme.of(context).colorScheme.primary,
+                      ),
+                      borderRadius: const BorderRadius.vertical(
+                        bottom: Radius.circular(16),
                       ),
                     );
                   },
@@ -1035,9 +1127,9 @@ class _PlayerScreenState extends State<PlayerScreen>
           return Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [Colors.deepPurple.shade900, Colors.black],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [const Color(0xFF2E004E), const Color(0xFF000000)],
               ),
             ),
             child: Padding(
@@ -1050,15 +1142,15 @@ class _PlayerScreenState extends State<PlayerScreen>
                       turns: _controller,
                       child: Container(
                         decoration: BoxDecoration(
-                          color: Colors.grey[900],
+                          color: const Color(0xFF1A1A1A),
                           shape: BoxShape.circle, // Chuyển thành hình tròn
                           border: Border.all(
-                            color: Colors.black,
-                            width: 8,
+                            color: const Color(0xFF121212),
+                            width: 12,
                           ), // Viền đĩa nhạc
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.5),
+                              color: Colors.black.withValues(alpha: 0.6),
                               blurRadius: 30,
                               offset: const Offset(0, 15),
                             ),
@@ -1144,7 +1236,9 @@ class _PlayerScreenState extends State<PlayerScreen>
                                 thumbShape: const RoundSliderThumbShape(
                                   enabledThumbRadius: 6.0,
                                 ),
-                                activeTrackColor: Colors.cyan,
+                                activeTrackColor: Theme.of(
+                                  context,
+                                ).colorScheme.primary,
                                 inactiveTrackColor: Colors.white24,
                                 thumbColor: Colors.white,
                               ),
@@ -1179,7 +1273,9 @@ class _PlayerScreenState extends State<PlayerScreen>
                                 overlayRadius: 14.0,
                               ),
                               trackHeight: 4.0,
-                              activeTrackColor: Colors.white,
+                              activeTrackColor: Theme.of(
+                                context,
+                              ).colorScheme.primary,
                               inactiveTrackColor: Colors.white24,
                               thumbColor: Colors.white,
                             ),
@@ -1232,7 +1328,7 @@ class _PlayerScreenState extends State<PlayerScreen>
                           return IconButton(
                             icon: const Icon(Icons.shuffle),
                             color: shuffleModeEnabled
-                                ? Colors.cyan
+                                ? Theme.of(context).colorScheme.primary
                                 : Colors.white70,
                             tooltip: 'Phát ngẫu nhiên',
                             onPressed: () async {
@@ -1269,14 +1365,16 @@ class _PlayerScreenState extends State<PlayerScreen>
                       ),
                       // Nút Play/Pause lớn
                       Container(
-                        width: 70,
-                        height: 70,
+                        width: 75,
+                        height: 75,
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: Theme.of(context).colorScheme.primary,
                           shape: BoxShape.circle,
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.white.withValues(alpha: 0.2),
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.primary.withValues(alpha: 0.4),
                               blurRadius: 10,
                               spreadRadius: 2,
                             ),
@@ -1338,12 +1436,12 @@ class _PlayerScreenState extends State<PlayerScreen>
                                 if (loopMode == LoopMode.one) {
                                   icon = const Icon(Icons.repeat_one);
                                   tooltip = 'Lặp 1 bài';
-                                  color = Colors.cyan;
+                                  color = Theme.of(context).colorScheme.primary;
                                 } else {
                                   // Mặc định là Lặp danh sách (LoopMode.all hoặc off)
                                   icon = const Icon(Icons.repeat);
                                   tooltip = 'Lặp danh sách';
-                                  color = Colors.cyan;
+                                  color = Theme.of(context).colorScheme.primary;
                                 }
                               }
 
