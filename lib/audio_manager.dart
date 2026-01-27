@@ -10,6 +10,8 @@ class AudioManager {
   static final AudioManager _instance = AudioManager._internal();
   factory AudioManager() => _instance;
 
+  int? _previousIndex;
+
   AudioManager._internal() {
     _initAudioSession();
     // Lắng nghe trạng thái player để tự động xử lý khi bài hát kết thúc
@@ -27,6 +29,24 @@ class AudioManager {
           player.play();
         }
       }
+    });
+
+    // Lắng nghe thay đổi bài hát để phát hiện khi hết vòng lặp (LoopMode.all)
+    // và thực hiện xáo trộn lại danh sách để vòng sau có thứ tự mới.
+    player.currentIndexStream.listen((index) {
+      if (index != null && _previousIndex != null) {
+        if (player.shuffleModeEnabled) {
+          final indices = player.effectiveIndices;
+          if (indices != null && indices.isNotEmpty) {
+            // Nếu bài trước đó là bài cuối cùng trong danh sách xáo trộn hiện tại
+            // VÀ bài hiện tại là bài đầu tiên -> Nghĩa là vừa hết 1 vòng.
+            if (_previousIndex == indices.last && index == indices.first) {
+              player.shuffle(); // Tạo thứ tự ngẫu nhiên mới cho vòng tiếp theo
+            }
+          }
+        }
+      }
+      _previousIndex = index;
     });
   }
 
