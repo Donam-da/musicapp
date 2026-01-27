@@ -10,21 +10,18 @@ class AudioManager {
   AudioManager._internal() {
     _initAudioSession();
     // Lắng nghe trạng thái player để tự động xử lý khi bài hát kết thúc
-    // Đảm bảo nhạc luôn phát tiếp (theo chế độ đã chọn) thay vì dừng lại
-    player.playerStateStream.listen((state) {
+    // và phát lại playlist khi nó kết thúc.
+    player.playerStateStream.listen((state) async {
       if (state.processingState == ProcessingState.completed) {
-        if (player.loopMode == LoopMode.one) {
-          player.seek(Duration.zero);
+        // Khi playlist kết thúc (chỉ xảy ra nếu LoopMode.off),
+        // hoặc có thể do một số lỗi không mong muốn, ta sẽ tự động phát lại từ đầu.
+        // Điều này đảm bảo nhạc không bao giờ dừng.
+        // `just_audio` sẽ tự xử lý LoopMode.one và LoopMode.all,
+        // nhưng listener này hoạt động như một phương án dự phòng chắc chắn.
+        final effectiveIndices = player.effectiveIndices;
+        if (effectiveIndices != null && effectiveIndices.isNotEmpty) {
+          await player.seek(Duration.zero, index: effectiveIndices.first);
           player.play();
-        } else {
-          if (player.loopMode == LoopMode.off) {
-            player.setLoopMode(LoopMode.all);
-          }
-          final indices = player.effectiveIndices;
-          if (indices != null && indices.isNotEmpty) {
-            player.seek(Duration.zero, index: indices.first);
-            player.play();
-          }
         }
       }
     });
