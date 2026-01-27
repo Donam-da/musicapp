@@ -55,9 +55,8 @@ class AudioManager {
     try {
       final PermissionState ps = await PhotoManager.requestPermissionExtend();
       if (ps.isAuth) {
-        // Dùng RequestType.common để lấy cả Video và Ảnh (phòng trường hợp file bị nhận nhầm)
         final List<AssetPathEntity> albums =
-            await PhotoManager.getAssetPathList(type: RequestType.common);
+            await PhotoManager.getAssetPathList(type: RequestType.video);
 
         for (final album in albums) {
           final count = await album.assetCountAsync;
