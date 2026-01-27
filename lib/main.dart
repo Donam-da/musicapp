@@ -371,31 +371,53 @@ class _LibraryScreenState extends State<LibraryScreen> {
         ),
         centerTitle: true,
         actions: [
-          if (_libraryMode != LibraryMode.manual)
-            PopupMenuButton<FileFilter>(
-              icon: const Icon(Icons.filter_list),
-              tooltip: "Lọc định dạng",
-              onSelected: (FileFilter result) {
-                setState(() {
-                  _fileFilter = result;
-                });
-              },
-              itemBuilder: (BuildContext context) =>
-                  <PopupMenuEntry<FileFilter>>[
-                    const PopupMenuItem<FileFilter>(
-                      value: FileFilter.all,
-                      child: Text('Tất cả'),
-                    ),
-                    const PopupMenuItem<FileFilter>(
-                      value: FileFilter.mp3,
-                      child: Text('Chỉ MP3'),
-                    ),
-                    const PopupMenuItem<FileFilter>(
-                      value: FileFilter.mp4,
-                      child: Text('Chỉ MP4'),
-                    ),
-                  ],
-            ),
+          PopupMenuButton<FileFilter>(
+            icon: const Icon(Icons.filter_list),
+            tooltip: "Lọc định dạng",
+            onSelected: (FileFilter result) {
+              setState(() {
+                _fileFilter = result;
+              });
+            },
+            itemBuilder: (BuildContext context) => <PopupMenuEntry<FileFilter>>[
+              PopupMenuItem<FileFilter>(
+                value: FileFilter.all,
+                child: Text(
+                  'Tất cả',
+                  style: TextStyle(
+                    color: _fileFilter == FileFilter.all ? Colors.cyan : null,
+                    fontWeight: _fileFilter == FileFilter.all
+                        ? FontWeight.bold
+                        : null,
+                  ),
+                ),
+              ),
+              PopupMenuItem<FileFilter>(
+                value: FileFilter.mp3,
+                child: Text(
+                  'Chỉ MP3',
+                  style: TextStyle(
+                    color: _fileFilter == FileFilter.mp3 ? Colors.cyan : null,
+                    fontWeight: _fileFilter == FileFilter.mp3
+                        ? FontWeight.bold
+                        : null,
+                  ),
+                ),
+              ),
+              PopupMenuItem<FileFilter>(
+                value: FileFilter.mp4,
+                child: Text(
+                  'Chỉ MP4',
+                  style: TextStyle(
+                    color: _fileFilter == FileFilter.mp4 ? Colors.cyan : null,
+                    fontWeight: _fileFilter == FileFilter.mp4
+                        ? FontWeight.bold
+                        : null,
+                  ),
+                ),
+              ),
+            ],
+          ),
           PopupMenuButton<LibraryMode>(
             icon: Icon(_getModeIcon()),
             tooltip: "Chuyển chế độ",
@@ -412,33 +434,78 @@ class _LibraryScreenState extends State<LibraryScreen> {
             },
             itemBuilder: (BuildContext context) =>
                 <PopupMenuEntry<LibraryMode>>[
-                  const PopupMenuItem<LibraryMode>(
+                  PopupMenuItem<LibraryMode>(
                     value: LibraryMode.manual,
                     child: Row(
                       children: [
-                        Icon(Icons.library_music),
-                        SizedBox(width: 8),
-                        Text('Danh sách thủ công'),
+                        Icon(
+                          Icons.library_music,
+                          color: _libraryMode == LibraryMode.manual
+                              ? Colors.cyan
+                              : null,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Danh sách thủ công',
+                          style: TextStyle(
+                            color: _libraryMode == LibraryMode.manual
+                                ? Colors.cyan
+                                : null,
+                            fontWeight: _libraryMode == LibraryMode.manual
+                                ? FontWeight.bold
+                                : null,
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                  const PopupMenuItem<LibraryMode>(
+                  PopupMenuItem<LibraryMode>(
                     value: LibraryMode.device,
                     child: Row(
                       children: [
-                        Icon(Icons.phone_android),
-                        SizedBox(width: 8),
-                        Text('Toàn bộ thiết bị'),
+                        Icon(
+                          Icons.phone_android,
+                          color: _libraryMode == LibraryMode.device
+                              ? Colors.cyan
+                              : null,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Toàn bộ thiết bị',
+                          style: TextStyle(
+                            color: _libraryMode == LibraryMode.device
+                                ? Colors.cyan
+                                : null,
+                            fontWeight: _libraryMode == LibraryMode.device
+                                ? FontWeight.bold
+                                : null,
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                  const PopupMenuItem<LibraryMode>(
+                  PopupMenuItem<LibraryMode>(
                     value: LibraryMode.folder,
                     child: Row(
                       children: [
-                        Icon(Icons.folder),
-                        SizedBox(width: 8),
-                        Text('Thư mục'),
+                        Icon(
+                          Icons.folder,
+                          color: _libraryMode == LibraryMode.folder
+                              ? Colors.cyan
+                              : null,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Thư mục',
+                          style: TextStyle(
+                            color: _libraryMode == LibraryMode.folder
+                                ? Colors.cyan
+                                : null,
+                            fontWeight: _libraryMode == LibraryMode.folder
+                                ? FontWeight.bold
+                                : null,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -500,7 +567,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
                         ))
                 : (_selectedSongs == null || _selectedSongs!.isEmpty
                       ? const Center(child: Text("Nhấn nút + để thêm bài hát"))
-                      : _buildSongList(_selectedSongs!, isCustomFile: true))),
+                      : _buildSongList(
+                          _getFilteredSongs(_selectedSongs!),
+                          isCustomFile: true,
+                        ))),
       bottomNavigationBar: const MiniPlayer(),
     );
   }
