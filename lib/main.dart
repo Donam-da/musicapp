@@ -63,6 +63,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
   FileFilter _fileFilter = FileFilter.all;
   bool _isAddingFiles = false;
   double _addingProgress = 0.0;
+  final Set<String> _multiSelectedPaths = {};
+  bool _isSelectionMode = false;
 
   @override
   void initState() {
@@ -110,7 +112,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   // Hàm quét nhạc từ thiết bị (chỉ gọi khi cần)
   Future<void> _fetchDeviceSongs() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _isSelectionMode = false;
+      _multiSelectedPaths.clear();
+    });
     final songs = await AudioManager().getSongs();
     setState(() {
       _librarySongs = songs;
@@ -120,7 +126,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   // Hàm quét nhạc từ thư mục được chọn
   Future<void> _fetchFolderSongs(String path) async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _isSelectionMode = false;
+      _multiSelectedPaths.clear();
+    });
     try {
       final dir = Directory(path);
       List<FileSystemEntity> entities = [];
@@ -293,386 +303,501 @@ class _LibraryScreenState extends State<LibraryScreen> {
     }
   }
 
+  void _toggleSelection(SongModel song) {
+    setState(() {
+      if (_multiSelectedPaths.contains(song.data)) {
+        _multiSelectedPaths.remove(song.data);
+        if (_multiSelectedPaths.isEmpty) {
+          _isSelectionMode = false;
+        }
+      } else {
+        _multiSelectedPaths.add(song.data);
+      }
+    });
+  }
+
+  void _deleteSelectedSongs() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Xác nhận xóa"),
+        content: Text(
+          "Bạn có chắc muốn xóa ${_multiSelectedPaths.length} bài hát đã chọn khỏi danh sách?",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Hủy"),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              setState(() {
+                if (_libraryMode == LibraryMode.device) {
+                  _librarySongs.removeWhere(
+                    (s) => _multiSelectedPaths.contains(s.data),
+                  );
+                } else if (_libraryMode == LibraryMode.folder) {
+                  _folderSongs.removeWhere(
+                    (s) => _multiSelectedPaths.contains(s.data),
+                  );
+                } else {
+                  _selectedSongs?.removeWhere(
+                    (s) => _multiSelectedPaths.contains(s.data),
+                  );
+                  if (_selectedSongs?.isEmpty ?? false) {
+                    _selectedSongs = null;
+                  }
+                }
+
+                if (_libraryMode == LibraryMode.manual) {
+                  _saveSelectedSongs();
+                }
+                _multiSelectedPaths.clear();
+                _isSelectionMode = false;
+              });
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text("Đã xóa các bài hát khỏi danh sách"),
+                ),
+              );
+            },
+            child: const Text("Xóa", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       extendBody: true,
-      floatingActionButton: _libraryMode == LibraryMode.manual
-          ? FloatingActionButton(
-              onPressed: () async {
-                // Mở trình chọn file
-                FilePickerResult? result = await FilePicker.platform.pickFiles(
-                  type: FileType.custom,
-                  allowedExtensions: [
-                    'mp3',
-                    'wav',
-                    'm4a',
-                    'flac',
-                    'ogg',
-                    'aac',
-                    'mp4',
-                  ],
-                  allowMultiple: true, // Cho phép chọn nhiều file
-                );
-
-                if (result != null) {
-                  setState(() {
-                    _isAddingFiles = true;
-                    _addingProgress = 0.0;
-                  });
-
-                  List<String> paths = result.paths
-                      .whereType<String>()
-                      .toList();
-
-                  List<SongModel> newSongs = [];
-                  int totalFiles = paths.length;
-
-                  for (int i = 0; i < totalFiles; i++) {
-                    String path = paths[i];
-                    final fileName = path.split(RegExp(r'[/\\]')).last;
-                    String directory = path;
-                    final lastSeparator = path.lastIndexOf(RegExp(r'[/\\]'));
-                    if (lastSeparator != -1) {
-                      directory = path.substring(0, lastSeparator);
-                    }
-                    final isMp4 = path.toLowerCase().endsWith('.mp4');
-
-                    newSongs.add(
-                      SongModel({
-                        "_id": path.hashCode,
-                        "_data": path,
-                        "title": fileName,
-                        "artist": directory,
-                        "genre": isMp4 ? "VideoFile" : "CustomFile",
-                      }),
-                    );
-
-                    // Cập nhật tiến trình và đợi 1 chút để UI kịp vẽ lại
-                    setState(() {
-                      _addingProgress = (i + 1) / totalFiles;
-                    });
-                    await Future.delayed(const Duration(milliseconds: 10));
-                  }
-
-                  int playIndex = 0;
-                  setState(() {
-                    // Nối thêm vào danh sách cũ thay vì thay thế
-                    if (_selectedSongs != null) {
-                      playIndex =
-                          _selectedSongs!.length; // Vị trí bắt đầu của bài mới
-                      _selectedSongs!.addAll(newSongs);
-                    } else {
-                      _selectedSongs = newSongs;
-                    }
-                    _isAddingFiles = false;
-                  });
-                  _saveSelectedSongs(); // Lưu lại danh sách mới
-                  AudioManager().playSong(_selectedSongs!, playIndex);
-                }
-              },
-              child: const Icon(Icons.add),
-            )
-          : (_libraryMode == LibraryMode.folder
+      floatingActionButton: _isSelectionMode
+          ? null
+          : (_libraryMode == LibraryMode.manual
                 ? FloatingActionButton(
-                    onPressed: _pickFolder,
-                    tooltip: "Chọn thư mục khác",
-                    child: const Icon(Icons.folder_open),
+                    onPressed: () async {
+                      // Mở trình chọn file
+                      FilePickerResult? result = await FilePicker.platform
+                          .pickFiles(
+                            type: FileType.custom,
+                            allowedExtensions: [
+                              'mp3',
+                              'wav',
+                              'm4a',
+                              'flac',
+                              'ogg',
+                              'aac',
+                              'mp4',
+                            ],
+                            allowMultiple: true, // Cho phép chọn nhiều file
+                          );
+
+                      if (result != null) {
+                        setState(() {
+                          _isAddingFiles = true;
+                          _addingProgress = 0.0;
+                        });
+
+                        List<String> paths = result.paths
+                            .whereType<String>()
+                            .toList();
+
+                        List<SongModel> newSongs = [];
+                        int totalFiles = paths.length;
+
+                        for (int i = 0; i < totalFiles; i++) {
+                          String path = paths[i];
+                          final fileName = path.split(RegExp(r'[/\\]')).last;
+                          String directory = path;
+                          final lastSeparator = path.lastIndexOf(
+                            RegExp(r'[/\\]'),
+                          );
+                          if (lastSeparator != -1) {
+                            directory = path.substring(0, lastSeparator);
+                          }
+                          final isMp4 = path.toLowerCase().endsWith('.mp4');
+
+                          newSongs.add(
+                            SongModel({
+                              "_id": path.hashCode,
+                              "_data": path,
+                              "title": fileName,
+                              "artist": directory,
+                              "genre": isMp4 ? "VideoFile" : "CustomFile",
+                            }),
+                          );
+
+                          // Cập nhật tiến trình và đợi 1 chút để UI kịp vẽ lại
+                          setState(() {
+                            _addingProgress = (i + 1) / totalFiles;
+                          });
+                          await Future.delayed(
+                            const Duration(milliseconds: 10),
+                          );
+                        }
+
+                        int playIndex = 0;
+                        setState(() {
+                          // Nối thêm vào danh sách cũ thay vì thay thế
+                          if (_selectedSongs != null) {
+                            playIndex = _selectedSongs!
+                                .length; // Vị trí bắt đầu của bài mới
+                            _selectedSongs!.addAll(newSongs);
+                          } else {
+                            _selectedSongs = newSongs;
+                          }
+                          _isAddingFiles = false;
+                        });
+                        _saveSelectedSongs(); // Lưu lại danh sách mới
+                        AudioManager().playSong(_selectedSongs!, playIndex);
+                      }
+                    },
+                    child: const Icon(Icons.add),
                   )
-                : null),
+                : (_libraryMode == LibraryMode.folder
+                      ? FloatingActionButton(
+                          onPressed: _pickFolder,
+                          tooltip: "Chọn thư mục khác",
+                          child: const Icon(Icons.folder_open),
+                        )
+                      : null)),
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.radar),
-          tooltip: "Quét lại",
-          onPressed: () {
-            if (_libraryMode == LibraryMode.device) {
-              _fetchDeviceSongs();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Đang quét lại thiết bị...")),
-              );
-            } else if (_libraryMode == LibraryMode.folder &&
-                _folderPath != null) {
-              _fetchFolderSongs(_folderPath!);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Đang cập nhật thư mục...")),
-              );
-            } else {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text("Chế độ thủ công không cần cập nhật"),
-                ),
-              );
-            }
-          },
-        ),
+        leading: _isSelectionMode
+            ? IconButton(
+                icon: const Icon(Icons.close),
+                onPressed: () {
+                  setState(() {
+                    _isSelectionMode = false;
+                    _multiSelectedPaths.clear();
+                  });
+                },
+              )
+            : IconButton(
+                icon: const Icon(Icons.radar),
+                tooltip: "Quét lại",
+                onPressed: () {
+                  if (_libraryMode == LibraryMode.device) {
+                    _fetchDeviceSongs();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Đang quét lại thiết bị..."),
+                      ),
+                    );
+                  } else if (_libraryMode == LibraryMode.folder &&
+                      _folderPath != null) {
+                    _fetchFolderSongs(_folderPath!);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("Đang cập nhật thư mục...")),
+                    );
+                  } else {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Chế độ thủ công không cần cập nhật"),
+                      ),
+                    );
+                  }
+                },
+              ),
         title: Text(
-          _libraryMode == LibraryMode.device
-              ? 'Toàn bộ thiết bị'
-              : (_libraryMode == LibraryMode.folder
-                    ? (_folderPath != null
-                          ? _folderPath!.split(RegExp(r'[/\\]')).last
-                          : 'Thư mục')
-                    : 'Danh sách thủ công'),
+          _isSelectionMode
+              ? "${_multiSelectedPaths.length} đã chọn"
+              : (_libraryMode == LibraryMode.device
+                    ? 'Toàn bộ thiết bị'
+                    : (_libraryMode == LibraryMode.folder
+                          ? (_folderPath != null
+                                ? _folderPath!.split(RegExp(r'[/\\]')).last
+                                : 'Thư mục')
+                          : 'Danh sách thủ công')),
         ),
         centerTitle: true,
-        actions: [
-          PopupMenuButton<FileFilter>(
-            icon: const Icon(Icons.filter_list),
-            tooltip: "Lọc định dạng",
-            onSelected: (FileFilter result) {
-              setState(() {
-                _fileFilter = result;
-              });
-            },
-            itemBuilder: (BuildContext context) => <PopupMenuEntry<FileFilter>>[
-              PopupMenuItem<FileFilter>(
-                value: FileFilter.all,
-                child: Text(
-                  'Tất cả',
-                  style: TextStyle(
-                    color: _fileFilter == FileFilter.all
-                        ? Theme.of(context).colorScheme.primary
-                        : null,
-                    fontWeight: _fileFilter == FileFilter.all
-                        ? FontWeight.bold
-                        : null,
-                  ),
+        actions: _isSelectionMode
+            ? [
+                IconButton(
+                  icon: const Icon(Icons.delete),
+                  tooltip: "Xóa đã chọn",
+                  onPressed: _multiSelectedPaths.isEmpty
+                      ? null
+                      : _deleteSelectedSongs,
                 ),
-              ),
-              PopupMenuItem<FileFilter>(
-                value: FileFilter.mp3,
-                child: Text(
-                  'Chỉ MP3',
-                  style: TextStyle(
-                    color: _fileFilter == FileFilter.mp3
-                        ? Theme.of(context).colorScheme.primary
-                        : null,
-                    fontWeight: _fileFilter == FileFilter.mp3
-                        ? FontWeight.bold
-                        : null,
-                  ),
-                ),
-              ),
-              PopupMenuItem<FileFilter>(
-                value: FileFilter.mp4,
-                child: Text(
-                  'Chỉ MP4',
-                  style: TextStyle(
-                    color: _fileFilter == FileFilter.mp4
-                        ? Theme.of(context).colorScheme.primary
-                        : null,
-                    fontWeight: _fileFilter == FileFilter.mp4
-                        ? FontWeight.bold
-                        : null,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          PopupMenuButton<LibraryMode>(
-            icon: Icon(_getModeIcon()),
-            tooltip: "Chuyển chế độ",
-            onSelected: (LibraryMode mode) {
-              if (_libraryMode != mode) {
-                setState(() => _libraryMode = mode);
-                if (mode == LibraryMode.device && _librarySongs.isEmpty) {
-                  _fetchDeviceSongs();
-                } else if (mode == LibraryMode.folder && _folderPath != null) {
-                  _fetchFolderSongs(_folderPath!);
-                }
-                _saveMode();
-              }
-            },
-            itemBuilder: (BuildContext context) =>
-                <PopupMenuEntry<LibraryMode>>[
-                  PopupMenuItem<LibraryMode>(
-                    value: LibraryMode.manual,
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.library_music,
-                          color: _libraryMode == LibraryMode.manual
-                              ? Theme.of(context).colorScheme.primary
-                              : null,
+              ]
+            : [
+                PopupMenuButton<FileFilter>(
+                  icon: const Icon(Icons.filter_list),
+                  tooltip: "Lọc định dạng",
+                  onSelected: (FileFilter result) {
+                    setState(() {
+                      _fileFilter = result;
+                    });
+                  },
+                  itemBuilder: (BuildContext context) =>
+                      <PopupMenuEntry<FileFilter>>[
+                        PopupMenuItem<FileFilter>(
+                          value: FileFilter.all,
+                          child: Text(
+                            'Tất cả',
+                            style: TextStyle(
+                              color: _fileFilter == FileFilter.all
+                                  ? Theme.of(context).colorScheme.primary
+                                  : null,
+                              fontWeight: _fileFilter == FileFilter.all
+                                  ? FontWeight.bold
+                                  : null,
+                            ),
+                          ),
                         ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Danh sách thủ công',
-                          style: TextStyle(
-                            color: _libraryMode == LibraryMode.manual
-                                ? Theme.of(context).colorScheme.primary
-                                : null,
-                            fontWeight: _libraryMode == LibraryMode.manual
-                                ? FontWeight.bold
-                                : null,
+                        PopupMenuItem<FileFilter>(
+                          value: FileFilter.mp3,
+                          child: Text(
+                            'Chỉ MP3',
+                            style: TextStyle(
+                              color: _fileFilter == FileFilter.mp3
+                                  ? Theme.of(context).colorScheme.primary
+                                  : null,
+                              fontWeight: _fileFilter == FileFilter.mp3
+                                  ? FontWeight.bold
+                                  : null,
+                            ),
+                          ),
+                        ),
+                        PopupMenuItem<FileFilter>(
+                          value: FileFilter.mp4,
+                          child: Text(
+                            'Chỉ MP4',
+                            style: TextStyle(
+                              color: _fileFilter == FileFilter.mp4
+                                  ? Theme.of(context).colorScheme.primary
+                                  : null,
+                              fontWeight: _fileFilter == FileFilter.mp4
+                                  ? FontWeight.bold
+                                  : null,
+                            ),
                           ),
                         ),
                       ],
-                    ),
-                  ),
-                  PopupMenuItem<LibraryMode>(
-                    value: LibraryMode.device,
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.phone_android,
-                          color: _libraryMode == LibraryMode.device
-                              ? Theme.of(context).colorScheme.primary
-                              : null,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Toàn bộ thiết bị',
-                          style: TextStyle(
-                            color: _libraryMode == LibraryMode.device
-                                ? Theme.of(context).colorScheme.primary
-                                : null,
-                            fontWeight: _libraryMode == LibraryMode.device
-                                ? FontWeight.bold
-                                : null,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  PopupMenuItem<LibraryMode>(
-                    value: LibraryMode.folder,
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.folder,
-                          color: _libraryMode == LibraryMode.folder
-                              ? Theme.of(context).colorScheme.primary
-                              : null,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Thư mục',
-                          style: TextStyle(
-                            color: _libraryMode == LibraryMode.folder
-                                ? Theme.of(context).colorScheme.primary
-                                : null,
-                            fontWeight: _libraryMode == LibraryMode.folder
-                                ? FontWeight.bold
-                                : null,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-          ),
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () {
-              // Tìm kiếm dựa trên danh sách đang hiển thị
-              List<SongModel> currentList = [];
-              if (_libraryMode == LibraryMode.device) {
-                currentList = _librarySongs;
-              } else if (_libraryMode == LibraryMode.folder) {
-                currentList = _folderSongs;
-              } else {
-                currentList = _selectedSongs ?? [];
-              }
-
-              if (currentList.isEmpty) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Danh sách nhạc trống")),
-                );
-                return;
-              }
-
-              showSearch(
-                context: context,
-                delegate: SongSearchDelegate(
-                  songs: currentList,
-                  isCustomFile: _libraryMode != LibraryMode.device,
                 ),
-              );
-            },
-          ),
-        ],
-      ),
-      body: Stack(
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  const Color(0xFF121212),
-                  Colors.deepPurple.shade900.withValues(alpha: 0.2),
-                ],
-              ),
-            ),
-            child: !_hasPermission
-                ? const Center(
-                    child: Text("Vui lòng cấp quyền truy cập để tải nhạc"),
-                  )
-                : _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _libraryMode == LibraryMode.device
-                ? (_librarySongs.isEmpty
-                      ? const Center(
-                          child: Text("Không tìm thấy bài hát nào trên máy"),
-                        )
-                      : _buildSongList(_getFilteredSongs(_librarySongs)))
-                : (_libraryMode == LibraryMode.folder
-                      ? (_folderSongs.isEmpty
-                            ? Center(
-                                child: Text(
-                                  _folderPath == null
-                                      ? "Chưa chọn thư mục. Nhấn nút folder để chọn."
-                                      : "Thư mục trống",
+                PopupMenuButton<LibraryMode>(
+                  icon: Icon(_getModeIcon()),
+                  tooltip: "Chuyển chế độ",
+                  onSelected: (LibraryMode mode) {
+                    if (_libraryMode != mode) {
+                      setState(() {
+                        _libraryMode = mode;
+                        _isSelectionMode = false;
+                        _multiSelectedPaths.clear();
+                      });
+                      if (mode == LibraryMode.device && _librarySongs.isEmpty) {
+                        _fetchDeviceSongs();
+                      } else if (mode == LibraryMode.folder &&
+                          _folderPath != null) {
+                        _fetchFolderSongs(_folderPath!);
+                      }
+                      _saveMode();
+                    }
+                  },
+                  itemBuilder: (BuildContext context) =>
+                      <PopupMenuEntry<LibraryMode>>[
+                        PopupMenuItem<LibraryMode>(
+                          value: LibraryMode.manual,
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.library_music,
+                                color: _libraryMode == LibraryMode.manual
+                                    ? Theme.of(context).colorScheme.primary
+                                    : null,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Danh sách thủ công',
+                                style: TextStyle(
+                                  color: _libraryMode == LibraryMode.manual
+                                      ? Theme.of(context).colorScheme.primary
+                                      : null,
+                                  fontWeight: _libraryMode == LibraryMode.manual
+                                      ? FontWeight.bold
+                                      : null,
                                 ),
-                              )
-                            : _buildSongList(
-                                _getFilteredSongs(_folderSongs),
-                                isCustomFile: true,
-                              ))
-                      : (_selectedSongs == null || _selectedSongs!.isEmpty
-                            ? const Center(
-                                child: Text("Nhấn nút + để thêm bài hát"),
-                              )
-                            : _buildSongList(
-                                _getFilteredSongs(_selectedSongs!),
-                                isCustomFile: true,
-                              ))),
-          ),
-          if (_isAddingFiles)
-            Container(
-              color: Colors.black.withValues(alpha: 0.8),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      width: 80,
-                      height: 80,
-                      child: CircularProgressIndicator(
-                        value: _addingProgress,
-                        strokeWidth: 8,
-                        backgroundColor: Colors.white10,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          Theme.of(context).colorScheme.primary,
+                              ),
+                            ],
+                          ),
                         ),
+                        PopupMenuItem<LibraryMode>(
+                          value: LibraryMode.device,
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.phone_android,
+                                color: _libraryMode == LibraryMode.device
+                                    ? Theme.of(context).colorScheme.primary
+                                    : null,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Toàn bộ thiết bị',
+                                style: TextStyle(
+                                  color: _libraryMode == LibraryMode.device
+                                      ? Theme.of(context).colorScheme.primary
+                                      : null,
+                                  fontWeight: _libraryMode == LibraryMode.device
+                                      ? FontWeight.bold
+                                      : null,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        PopupMenuItem<LibraryMode>(
+                          value: LibraryMode.folder,
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.folder,
+                                color: _libraryMode == LibraryMode.folder
+                                    ? Theme.of(context).colorScheme.primary
+                                    : null,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Thư mục',
+                                style: TextStyle(
+                                  color: _libraryMode == LibraryMode.folder
+                                      ? Theme.of(context).colorScheme.primary
+                                      : null,
+                                  fontWeight: _libraryMode == LibraryMode.folder
+                                      ? FontWeight.bold
+                                      : null,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                ),
+                IconButton(
+                  icon: const Icon(Icons.search),
+                  onPressed: () {
+                    // Tìm kiếm dựa trên danh sách đang hiển thị
+                    List<SongModel> currentList = [];
+                    if (_libraryMode == LibraryMode.device) {
+                      currentList = _librarySongs;
+                    } else if (_libraryMode == LibraryMode.folder) {
+                      currentList = _folderSongs;
+                    } else {
+                      currentList = _selectedSongs ?? [];
+                    }
+
+                    if (currentList.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text("Danh sách nhạc trống")),
+                      );
+                      return;
+                    }
+
+                    showSearch(
+                      context: context,
+                      delegate: SongSearchDelegate(
+                        songs: currentList,
+                        isCustomFile: _libraryMode != LibraryMode.device,
                       ),
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      "Đang thêm... ${(_addingProgress * 100).toInt()}%",
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    );
+                  },
+                ),
+              ],
+      ),
+      body: PopScope(
+        canPop: !_isSelectionMode,
+        onPopInvokedWithResult: (didPop, result) {
+          if (didPop) return;
+          if (_isSelectionMode) {
+            setState(() {
+              _isSelectionMode = false;
+              _multiSelectedPaths.clear();
+            });
+          }
+        },
+        child: Stack(
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    const Color(0xFF121212),
+                    Colors.deepPurple.shade900.withValues(alpha: 0.2),
                   ],
                 ),
               ),
+              child: !_hasPermission
+                  ? const Center(
+                      child: Text("Vui lòng cấp quyền truy cập để tải nhạc"),
+                    )
+                  : _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _libraryMode == LibraryMode.device
+                  ? (_librarySongs.isEmpty
+                        ? const Center(
+                            child: Text("Không tìm thấy bài hát nào trên máy"),
+                          )
+                        : _buildSongList(_getFilteredSongs(_librarySongs)))
+                  : (_libraryMode == LibraryMode.folder
+                        ? (_folderSongs.isEmpty
+                              ? Center(
+                                  child: Text(
+                                    _folderPath == null
+                                        ? "Chưa chọn thư mục. Nhấn nút folder để chọn."
+                                        : "Thư mục trống",
+                                  ),
+                                )
+                              : _buildSongList(
+                                  _getFilteredSongs(_folderSongs),
+                                  isCustomFile: true,
+                                ))
+                        : (_selectedSongs == null || _selectedSongs!.isEmpty
+                              ? const Center(
+                                  child: Text("Nhấn nút + để thêm bài hát"),
+                                )
+                              : _buildSongList(
+                                  _getFilteredSongs(_selectedSongs!),
+                                  isCustomFile: true,
+                                ))),
             ),
-        ],
+            if (_isAddingFiles)
+              Container(
+                color: Colors.black.withValues(alpha: 0.8),
+                child: Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        width: 80,
+                        height: 80,
+                        child: CircularProgressIndicator(
+                          value: _addingProgress,
+                          strokeWidth: 8,
+                          backgroundColor: Colors.white10,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        "Đang thêm... ${(_addingProgress * 100).toInt()}%",
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
       bottomNavigationBar: const MiniPlayer(),
     );
@@ -771,15 +896,24 @@ class _LibraryScreenState extends State<LibraryScreen> {
       itemCount: songs.length,
       itemBuilder: (context, index) {
         final song = songs[index];
+        final isSelected = _multiSelectedPaths.contains(song.data);
         final isVideo = song.genre == "VideoFile";
         final icon = isVideo ? Icons.movie : Icons.music_note;
         return Container(
           margin: const EdgeInsets.only(bottom: 8),
           decoration: BoxDecoration(
-            color: Theme.of(
-              context,
-            ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+            color: isSelected
+                ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.3)
+                : Theme.of(
+                    context,
+                  ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
             borderRadius: BorderRadius.circular(12),
+            border: isSelected
+                ? Border.all(
+                    color: Theme.of(context).colorScheme.primary,
+                    width: 1,
+                  )
+                : null,
           ),
           child: ListTile(
             contentPadding: const EdgeInsets.symmetric(
@@ -845,69 +979,87 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 fontSize: 13,
               ),
             ),
-            trailing: PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert, color: Colors.white70),
-              onSelected: (value) {
-                if (value == 'info') {
-                  _showSongInfo(song);
-                }
-                if (value == 'delete') {
-                  showDialog(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      title: const Text("Xác nhận xóa"),
-                      content: Text(
-                        "Bạn có chắc muốn xóa bài hát '${song.title}'?",
-                      ),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text("Hủy"),
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            Navigator.pop(context);
-                            _deleteSong(song, isCustomFile);
-                          },
-                          child: const Text(
-                            "Xóa",
-                            style: TextStyle(color: Colors.red),
+            trailing: _isSelectionMode
+                ? Checkbox(
+                    value: isSelected,
+                    onChanged: (val) => _toggleSelection(song),
+                    activeColor: Theme.of(context).colorScheme.primary,
+                  )
+                : PopupMenuButton<String>(
+                    icon: const Icon(Icons.more_vert, color: Colors.white70),
+                    onSelected: (value) {
+                      if (value == 'info') {
+                        _showSongInfo(song);
+                      }
+                      if (value == 'delete') {
+                        showDialog(
+                          context: context,
+                          builder: (context) => AlertDialog(
+                            title: const Text("Xác nhận xóa"),
+                            content: Text(
+                              "Bạn có chắc muốn xóa bài hát '${song.title}'?",
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: const Text("Hủy"),
+                              ),
+                              TextButton(
+                                onPressed: () {
+                                  Navigator.pop(context);
+                                  _deleteSong(song, isCustomFile);
+                                },
+                                child: const Text(
+                                  "Xóa",
+                                  style: TextStyle(color: Colors.red),
+                                ),
+                              ),
+                            ],
                           ),
+                        );
+                      }
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'info',
+                        child: Row(
+                          children: [
+                            Icon(Icons.info_outline, color: Colors.blue),
+                            SizedBox(width: 8),
+                            Text("Thông tin"),
+                          ],
                         ),
-                      ],
-                    ),
-                  );
-                }
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'info',
-                  child: Row(
-                    children: [
-                      Icon(Icons.info_outline, color: Colors.blue),
-                      SizedBox(width: 8),
-                      Text("Thông tin"),
+                      ),
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete, color: Colors.red),
+                            SizedBox(width: 8),
+                            Text("Xóa"),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
-                ),
-                const PopupMenuItem(
-                  value: 'delete',
-                  child: Row(
-                    children: [
-                      Icon(Icons.delete, color: Colors.red),
-                      SizedBox(width: 8),
-                      Text("Xóa"),
-                    ],
-                  ),
-                ),
-              ],
-            ),
             onTap: () {
-              AudioManager().playSong(songs, index);
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const PlayerScreen()),
-              );
+              if (_isSelectionMode) {
+                _toggleSelection(song);
+              } else {
+                AudioManager().playSong(songs, index);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const PlayerScreen()),
+                );
+              }
+            },
+            onLongPress: () {
+              if (!_isSelectionMode) {
+                setState(() {
+                  _isSelectionMode = true;
+                  _multiSelectedPaths.add(song.data);
+                });
+              }
             },
           ),
         );
