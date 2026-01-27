@@ -1,11 +1,13 @@
 import 'dart:io';
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:photo_manager/photo_manager.dart';
 import 'audio_manager.dart';
 
 enum LibraryMode { manual, device, folder }
@@ -40,7 +42,48 @@ class MusicApp extends StatelessWidget {
           centerTitle: true,
         ),
       ),
-      home: const LibraryScreen(),
+      home: const MainScreen(),
+    );
+  }
+}
+
+class MainScreen extends StatefulWidget {
+  const MainScreen({super.key});
+
+  @override
+  State<MainScreen> createState() => _MainScreenState();
+}
+
+class _MainScreenState extends State<MainScreen> {
+  late PageController _pageController;
+  // Bắt đầu ở một trang chẵn lớn để có thể vuốt trái/phải vô tận
+  final int _initialPage = 1000;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: _initialPage);
+    // Gán controller vào AudioManager để các widget con có thể điều khiển chuyển trang
+    AudioManager().pageController = _pageController;
+  }
+
+  @override
+  void dispose() {
+    AudioManager().pageController = null;
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return PageView.builder(
+      controller: _pageController,
+      // Thêm hiệu ứng vật lý mượt mà hơn
+      physics: const BouncingScrollPhysics(),
+      itemBuilder: (context, index) {
+        // index chẵn là Library, index lẻ là Player
+        return index % 2 == 0 ? const LibraryScreen() : const PlayerScreen();
+      },
     );
   }
 }
@@ -52,7 +95,11 @@ class LibraryScreen extends StatefulWidget {
   State<LibraryScreen> createState() => _LibraryScreenState();
 }
 
-class _LibraryScreenState extends State<LibraryScreen> {
+class _LibraryScreenState extends State<LibraryScreen>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   bool _hasPermission = false;
   List<SongModel>? _selectedSongs;
   List<SongModel> _librarySongs = [];
@@ -73,8 +120,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
   }
 
   Future<void> _initApp() async {
-    await _loadSavedData();
     await requestPermission();
+    await _loadSavedData();
   }
 
   Future<void> requestPermission() async {
@@ -100,6 +147,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
       setState(() {
         _hasPermission = true;
       });
+      // Luôn cập nhật danh sách ID thực từ hệ thống khi có quyền
+      await AudioManager().getSongs();
       if (_libraryMode == LibraryMode.device) {
         await _fetchDeviceSongs();
       } else {
@@ -163,8 +212,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
           .map((file) {
             final fileName = file.path.split(RegExp(r'[/\\]')).last;
             final isMp4 = fileName.toLowerCase().endsWith('.mp4');
+            final realId =
+                AudioManager().pathToIdMap[file.path] ?? file.path.hashCode;
             return SongModel({
-              "_id": file.path.hashCode,
+              "_id": realId,
               "_data": file.path,
               "title": fileName,
               "artist": path.split(RegExp(r'[/\\]')).last,
@@ -210,8 +261,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
           directory = path.substring(0, lastSeparator);
         }
         final isMp4 = path.toLowerCase().endsWith('.mp4');
+        final realId = AudioManager().pathToIdMap[path] ?? path.hashCode;
         return SongModel({
-          "_id": path.hashCode,
+          "_id": realId,
           "_data": path,
           "title": fileName,
           "artist": directory,
@@ -371,6 +423,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Bắt buộc khi dùng AutomaticKeepAliveClientMixin
     return Scaffold(
       extendBody: true,
       floatingActionButton: _isSelectionMode
@@ -405,10 +458,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
                             directory = path.substring(0, lastSeparator);
                           }
                           final isMp4 = path.toLowerCase().endsWith('.mp4');
+                          final realId =
+                              AudioManager().pathToIdMap[path] ?? path.hashCode;
 
                           newSongs.add(
                             SongModel({
-                              "_id": path.hashCode,
+                              "_id": realId,
                               "_data": path,
                               "title": fileName,
                               "artist": directory,
@@ -881,8 +936,6 @@ class _LibraryScreenState extends State<LibraryScreen> {
       itemBuilder: (context, index) {
         final song = songs[index];
         final isSelected = _multiSelectedPaths.contains(song.data);
-        final isVideo = song.genre == "VideoFile";
-        final icon = isVideo ? Icons.movie : Icons.music_note;
         return Container(
           margin: const EdgeInsets.only(bottom: 8),
           decoration: BoxDecoration(
@@ -904,46 +957,12 @@ class _LibraryScreenState extends State<LibraryScreen> {
               horizontal: 12,
               vertical: 4,
             ),
-            leading: (isCustomFile || isVideo)
-                ? Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: isVideo
-                            ? [Colors.teal.shade400, Colors.cyan.shade700]
-                            : [
-                                Colors.pinkAccent.shade100,
-                                Colors.deepPurpleAccent.shade400,
-                              ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(icon, color: Colors.white),
-                  )
-                : QueryArtworkWidget(
-                    id: song.id,
-                    type: ArtworkType.AUDIO,
-                    artworkBorder: BorderRadius.circular(12),
-                    nullArtworkWidget: Container(
-                      width: 50,
-                      height: 50,
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            Colors.pinkAccent.shade100,
-                            Colors.deepPurpleAccent.shade400,
-                          ],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: const Icon(Icons.music_note, color: Colors.white),
-                    ),
-                  ),
+            leading: SongArtwork(
+              song: song,
+              width: 50,
+              height: 50,
+              borderRadius: 12,
+            ),
             title: Text(
               song.title,
               maxLines: 1,
@@ -1033,10 +1052,15 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 _toggleSelection(song);
               } else {
                 AudioManager().playSong(songs, index);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const PlayerScreen()),
-                );
+                // Chuyển sang trang kế tiếp (Player)
+                final controller = AudioManager().pageController;
+                if (controller != null && controller.hasClients) {
+                  controller.animateToPage(
+                    (controller.page?.round() ?? 0) + 1,
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.easeInOut,
+                  );
+                }
               }
             },
             onLongPress: () {
@@ -1205,7 +1229,7 @@ class _FilePickerCustomScreenState extends State<FilePickerCustomScreen> {
                                 },
                               ),
                         onTap: isDirectory
-                            ? () => _navigate(entity as Directory)
+                            ? () => _navigate(entity)
                             : () {
                                 setState(() {
                                   if (isSelected) {
@@ -1394,19 +1418,20 @@ class MiniPlayer extends StatelessWidget {
       builder: (context, snapshot) {
         final state = snapshot.data;
         if (state?.currentSource == null) return const SizedBox.shrink();
-        final song = state!.currentSource!.tag as SongModel;
-        final isCustom =
-            song.genre == "CustomFile" ||
-            song.genre == "FolderFile" ||
-            song.genre == "VideoFile";
+        final SongModel song = state!.currentSource!.tag;
         final isVideo = song.genre == "VideoFile";
 
         return GestureDetector(
           onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const PlayerScreen()),
-            );
+            // Chuyển sang trang kế tiếp (Player)
+            final controller = AudioManager().pageController;
+            if (controller != null && controller.hasClients) {
+              controller.animateToPage(
+                (controller.page?.round() ?? 0) + 1,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+              );
+            }
           },
           child: Container(
             height: 75,
@@ -1434,38 +1459,30 @@ class MiniPlayer extends StatelessWidget {
                             borderRadius: BorderRadius.circular(8),
                             color: Colors.grey[800],
                           ),
-                          child: isCustom
-                              ? Padding(
-                                  padding: const EdgeInsets.all(8.0),
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: isVideo
-                                          ? Colors.teal.withValues(alpha: 0.3)
-                                          : Colors.pink.withValues(alpha: 0.3),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Icon(
-                                      isVideo ? Icons.movie : Icons.music_note,
-                                      size: 32,
-                                      color: isVideo
-                                          ? Colors.cyanAccent
-                                          : Colors.pinkAccent,
-                                    ),
-                                  ),
-                                )
-                              : QueryArtworkWidget(
-                                  id: song.id,
-                                  type: ArtworkType.AUDIO,
-                                  artworkBorder: BorderRadius.circular(8),
-                                  nullArtworkWidget: const Padding(
-                                    padding: EdgeInsets.all(8.0),
-                                    child: Icon(
-                                      Icons.music_note,
-                                      size: 32,
-                                      color: Colors.white,
-                                    ),
-                                  ),
+                          child: SongArtwork(
+                            song: song,
+                            width: 50,
+                            height: 50,
+                            borderRadius: 8,
+                            nullArtworkWidget: Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: isVideo
+                                      ? Colors.teal.withValues(alpha: 0.3)
+                                      : Colors.pink.withValues(alpha: 0.3),
+                                  borderRadius: BorderRadius.circular(4),
                                 ),
+                                child: Icon(
+                                  isVideo ? Icons.movie : Icons.music_note,
+                                  size: 32,
+                                  color: isVideo
+                                      ? Colors.cyanAccent
+                                      : Colors.pinkAccent,
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -1586,7 +1603,10 @@ class PlayerScreen extends StatefulWidget {
 }
 
 class _PlayerScreenState extends State<PlayerScreen>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   late AnimationController _controller;
   StreamSubscription<bool>? _playingSubscription;
   bool _isVolumeVisible = false;
@@ -1647,6 +1667,7 @@ class _PlayerScreenState extends State<PlayerScreen>
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Bắt buộc khi dùng AutomaticKeepAliveClientMixin
     final player = AudioManager().player;
     return Scaffold(
       extendBodyBehindAppBar: true, // Để background tràn lên status bar
@@ -1657,7 +1678,17 @@ class _PlayerScreenState extends State<PlayerScreen>
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.keyboard_arrow_down),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () {
+            // Quay lại trang trước đó (Library)
+            final controller = AudioManager().pageController;
+            if (controller != null && controller.hasClients) {
+              controller.animateToPage(
+                (controller.page?.round() ?? 0) - 1,
+                duration: const Duration(milliseconds: 300),
+                curve: Curves.easeInOut,
+              );
+            }
+          },
         ),
       ),
       body: StreamBuilder<SequenceState?>(
@@ -1665,7 +1696,7 @@ class _PlayerScreenState extends State<PlayerScreen>
         builder: (context, snapshot) {
           final state = snapshot.data;
           if (state?.currentSource == null) return const SizedBox.shrink();
-          final song = state!.currentSource!.tag as SongModel;
+          final SongModel song = state!.currentSource!.tag;
           final isCustom =
               song.genre == "CustomFile" ||
               song.genre == "FolderFile" ||
@@ -1707,23 +1738,17 @@ class _PlayerScreenState extends State<PlayerScreen>
                         child: ClipOval(
                           // Cắt ảnh theo hình tròn
                           child: Center(
-                            child: isCustom
-                                ? Icon(
-                                    isVideo ? Icons.movie : Icons.music_note,
-                                    size: 120,
-                                    color: Colors.white54,
-                                  )
-                                : QueryArtworkWidget(
-                                    id: song.id,
-                                    type: ArtworkType.AUDIO,
-                                    artworkHeight: 300,
-                                    artworkWidth: 300,
-                                    nullArtworkWidget: const Icon(
-                                      Icons.music_note,
-                                      size: 120,
-                                      color: Colors.white54,
-                                    ),
-                                  ),
+                            child: SongArtwork(
+                              song: song,
+                              width: 300,
+                              height: 300,
+                              borderRadius: 150,
+                              nullArtworkWidget: Icon(
+                                isVideo ? Icons.movie : Icons.music_note,
+                                size: 120,
+                                color: Colors.white54,
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -2135,41 +2160,13 @@ class SongSearchDelegate extends SearchDelegate {
       itemCount: suggestions.length,
       itemBuilder: (context, index) {
         final song = suggestions[index];
-        final isVideo = song.genre == "VideoFile";
-        final icon = isVideo ? Icons.movie : Icons.music_note;
         return ListTile(
-          leading: (isCustomFile || isVideo)
-              ? Container(
-                  width: 50,
-                  height: 50,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: isVideo
-                          ? [Colors.teal.shade400, Colors.cyan.shade700]
-                          : [
-                              Colors.pinkAccent.shade100,
-                              Colors.deepPurpleAccent.shade400,
-                            ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(icon, color: Colors.white, size: 28),
-                )
-              : QueryArtworkWidget(
-                  id: song.id,
-                  type: ArtworkType.AUDIO,
-                  nullArtworkWidget: Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: Colors.grey[800],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(Icons.music_note, color: Colors.white),
-                  ),
-                ),
+          leading: SongArtwork(
+            song: song,
+            width: 50,
+            height: 50,
+            borderRadius: 8,
+          ),
           title: Text(song.title, style: const TextStyle(color: Colors.white)),
           subtitle: Text(
             (song.artist == null || song.artist == '<unknown>')
@@ -2188,13 +2185,125 @@ class SongSearchDelegate extends SearchDelegate {
 
             // Phát nhạc và mở màn hình Player
             AudioManager().playSong(songs, originalIndex);
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const PlayerScreen()),
-            );
+            final controller = AudioManager().pageController;
+            if (controller != null && controller.hasClients) {
+              controller.jumpToPage((controller.page?.round() ?? 0) + 1);
+            }
           },
         );
       },
+    );
+  }
+}
+
+class SongArtwork extends StatefulWidget {
+  final SongModel song;
+  final double width;
+  final double height;
+  final double borderRadius;
+  final Widget? nullArtworkWidget;
+
+  const SongArtwork({
+    super.key,
+    required this.song,
+    this.width = 50,
+    this.height = 50,
+    this.borderRadius = 12,
+    this.nullArtworkWidget,
+  });
+
+  @override
+  State<SongArtwork> createState() => _SongArtworkState();
+}
+
+class _SongArtworkState extends State<SongArtwork> {
+  Future<Uint8List?>? _thumbnailFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _thumbnailFuture = _loadThumbnail();
+  }
+
+  @override
+  void didUpdateWidget(SongArtwork oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.song.id != oldWidget.song.id) {
+      _thumbnailFuture = _loadThumbnail();
+    }
+  }
+
+  Future<Uint8List?> _loadThumbnail() async {
+    try {
+      final entity = await AssetEntity.fromId(widget.song.id.toString());
+      return await entity?.thumbnailDataWithSize(
+        ThumbnailSize(widget.width.toInt() * 2, widget.height.toInt() * 2),
+      );
+    } catch (e) {
+      return null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isVideo = widget.song.genre == "VideoFile";
+
+    if (_thumbnailFuture != null) {
+      return FutureBuilder<Uint8List?>(
+        future: _thumbnailFuture,
+        builder: (context, snapshot) {
+          if (snapshot.hasData && snapshot.data != null) {
+            return ClipRRect(
+              borderRadius: BorderRadius.circular(widget.borderRadius),
+              child: Image.memory(
+                snapshot.data!,
+                width: widget.width,
+                height: widget.height,
+                fit: BoxFit.cover,
+              ),
+            );
+          }
+
+          // Nếu không lấy được ảnh từ hệ thống và là nhạc, dùng QueryArtworkWidget làm dự phòng
+          if (!isVideo) {
+            return QueryArtworkWidget(
+              id: widget.song.id,
+              type: ArtworkType.AUDIO,
+              artworkWidth: widget.width,
+              artworkHeight: widget.height,
+              artworkBorder: BorderRadius.circular(widget.borderRadius),
+              format: ArtworkFormat.PNG,
+              nullArtworkWidget:
+                  widget.nullArtworkWidget ??
+                  _defaultPlaceholder(context, false),
+            );
+          }
+          return widget.nullArtworkWidget ??
+              _defaultPlaceholder(context, isVideo);
+        },
+      );
+    }
+    return widget.nullArtworkWidget ?? _defaultPlaceholder(context, isVideo);
+  }
+
+  Widget _defaultPlaceholder(BuildContext context, bool isVideo) {
+    final icon = isVideo ? Icons.movie : Icons.music_note;
+    final colors = isVideo
+        ? [Colors.teal.shade400, Colors.cyan.shade700]
+        : [Colors.pinkAccent.shade100, Colors.deepPurpleAccent.shade400];
+
+    return Container(
+      width: widget.width,
+      height: widget.height,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: colors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(widget.borderRadius),
+      ),
+      child: Icon(icon, color: Colors.white, size: widget.width * 0.6),
     );
   }
 }

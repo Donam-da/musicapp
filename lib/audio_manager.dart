@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import 'package:audio_session/audio_session.dart';
@@ -11,6 +11,12 @@ class AudioManager {
   factory AudioManager() => _instance;
 
   int? _previousIndex;
+
+  PageController? pageController;
+
+  // Map để tra cứu ID thực từ hệ thống dựa trên đường dẫn file
+  Map<String, int> _pathToIdMap = {};
+  Map<String, int> get pathToIdMap => _pathToIdMap;
 
   AudioManager._internal() {
     _initAudioSession();
@@ -67,6 +73,9 @@ class AudioManager {
       ignoreCase: true,
     );
 
+    // Cập nhật map tra cứu ID thực
+    _pathToIdMap = {for (var s in songs) s.data: s.id};
+
     // Tập hợp các đường dẫn đã quét để tránh trùng lặp
     final Set<String> processedPaths = songs.map((s) => s.data).toSet();
     List<SongModel> videoSongs = [];
@@ -92,7 +101,11 @@ class AudioManager {
             if (file != null && !processedPaths.contains(file.path)) {
               videoSongs.add(
                 SongModel({
-                  "_id": video.id.hashCode, // Tạo ID giả từ ID của video
+                  "_id":
+                      int.tryParse(video.id) ??
+                      video
+                          .id
+                          .hashCode, // Cố gắng lấy ID thực từ hệ thống để tìm ảnh bìa
                   "_data": file.path,
                   "title": video.title ?? file.path.split('/').last,
                   "artist": "<Video>",
