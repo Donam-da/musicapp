@@ -1,7 +1,9 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import 'package:audio_session/audio_session.dart';
+import 'package:photo_manager/photo_manager.dart';
 
 class AudioManager {
   // Singleton pattern
@@ -45,7 +47,99 @@ class AudioManager {
       ignoreCase: true,
     );
 
-    return songs;
+    // Tập hợp các đường dẫn đã quét để tránh trùng lặp
+    final Set<String> processedPaths = songs.map((s) => s.data).toSet();
+    List<SongModel> videoSongs = [];
+
+    // CÁCH 1: Quét Video sử dụng PhotoManager (Hệ thống)
+    try {
+      final PermissionState ps = await PhotoManager.requestPermissionExtend();
+      if (ps.isAuth) {
+        // Dùng RequestType.common để lấy cả Video và Ảnh (phòng trường hợp file bị nhận nhầm)
+        final List<AssetPathEntity> albums =
+            await PhotoManager.getAssetPathList(type: RequestType.common);
+
+        for (final album in albums) {
+          final count = await album.assetCountAsync;
+          final videos = await album.getAssetListRange(start: 0, end: count);
+          for (final video in videos) {
+            // Chỉ lấy Video hoặc file có đuôi .mp4
+            if (video.type != AssetType.video) {
+              final title = video.title?.toLowerCase() ?? '';
+              if (!title.endsWith('.mp4')) continue;
+            }
+
+            final file = await video.file; // Lấy file thực tế
+            if (file != null && !processedPaths.contains(file.path)) {
+              videoSongs.add(
+                SongModel({
+                  "_id": video.id.hashCode, // Tạo ID giả từ ID của video
+                  "_data": file.path,
+                  "title": video.title ?? file.path.split('/').last,
+                  "artist": "<Video>",
+                  "genre": "VideoFile",
+                }),
+              );
+              processedPaths.add(file.path);
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Lỗi quét video: $e");
+    }
+
+    // CÁCH 2: Quét thủ công các thư mục phổ biến (Manual Scan)
+    // Đây là "cách khác" để tìm file khi MediaStore bị lỗi hoặc chưa cập nhật
+    final commonPaths = [
+      '/storage/emulated/0/Download',
+      '/storage/emulated/0/DCIM',
+      '/storage/emulated/0/Pictures',
+      '/storage/emulated/0/Music',
+      '/storage/emulated/0/Movies',
+      '/storage/emulated/0/Video',
+      '/storage/emulated/0/Zalo',
+      '/storage/emulated/0/Facebook',
+    ];
+
+    for (final path in commonPaths) {
+      final dir = Directory(path);
+      try {
+        if (await dir.exists()) {
+          // Quét đệ quy để tìm sâu bên trong
+          await for (final entity in dir.list(
+            recursive: true,
+            followLinks: false,
+          )) {
+            if (entity is File) {
+              final p = entity.path;
+              if (p.toLowerCase().endsWith('.mp4') &&
+                  !processedPaths.contains(p)) {
+                final fileName = p.split(Platform.pathSeparator).last;
+                final parentName = entity.parent.path
+                    .split(Platform.pathSeparator)
+                    .last;
+                videoSongs.add(
+                  SongModel({
+                    "_id": p.hashCode,
+                    "_data": p,
+                    "title": fileName,
+                    "artist": parentName,
+                    "genre": "VideoFile",
+                  }),
+                );
+                processedPaths.add(p);
+              }
+            }
+          }
+        }
+      } catch (e) {
+        // Bỏ qua lỗi quyền truy cập ở các thư mục con
+        // debugPrint("Lỗi quét thủ công $path: $e");
+      }
+    }
+
+    return [...songs, ...videoSongs];
   }
 
   // Thiết lập danh sách phát và phát bài hát tại index được chọn

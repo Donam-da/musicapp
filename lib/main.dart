@@ -73,9 +73,17 @@ class _LibraryScreenState extends State<LibraryScreen> {
       Permission.videos,
     ].request();
 
+    // Kiểm tra và yêu cầu quyền quản lý bộ nhớ ngoài (Android 11+)
+    // Quyền này giúp quét được thư mục Download và sửa lỗi "Android chặn..."
+    if (Platform.isAndroid &&
+        await Permission.manageExternalStorage.status.isDenied) {
+      await Permission.manageExternalStorage.request();
+    }
+
     if (statuses[Permission.storage]!.isGranted ||
         statuses[Permission.audio]!.isGranted ||
-        statuses[Permission.videos]!.isGranted) {
+        statuses[Permission.videos]!.isGranted ||
+        (await Permission.manageExternalStorage.status.isGranted)) {
       setState(() {
         _hasPermission = true;
       });
@@ -104,7 +112,19 @@ class _LibraryScreenState extends State<LibraryScreen> {
     setState(() => _isLoading = true);
     try {
       final dir = Directory(path);
-      final entities = await dir.list().toList();
+      List<FileSystemEntity> entities = [];
+      // Quét đệ quy (recursive: true) để tìm cả trong thư mục con
+      try {
+        await for (final entity in dir.list(
+          recursive: true,
+          followLinks: false,
+        )) {
+          entities.add(entity);
+        }
+      } catch (e) {
+        debugPrint("Lỗi quét file trong thư mục: $e");
+      }
+
       final songs = entities
           .whereType<File>()
           .where((file) {
@@ -294,23 +314,21 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     onPressed: () async {
                       try {
                         String? path = await FilePicker.platform
-                            .getDirectoryPath();
+                            .getDirectoryPath(lockParentWindow: true);
                         if (path != null) {
                           _fetchFolderSongs(path);
                           _saveMode();
                         } else {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  "Chưa chọn thư mục. Lưu ý: Android chặn chọn trực tiếp thư mục Download.",
-                                ),
-                              ),
-                            );
-                          }
+                          // Người dùng hủy chọn hoặc hệ thống chặn
+                          debugPrint("Không chọn được thư mục (path = null)");
                         }
                       } catch (e) {
                         debugPrint("Lỗi chọn thư mục: $e");
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text("Lỗi mở chọn thư mục: $e")),
+                          );
+                        }
                       }
                     },
                     tooltip: "Chọn thư mục khác",
@@ -320,7 +338,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
       appBar: AppBar(
         leading: IconButton(
           icon: const Icon(Icons.radar),
-          tooltip: "Cập nhật danh sách",
+          tooltip: "Quét lại",
           onPressed: () {
             if (_libraryMode == LibraryMode.device) {
               _fetchDeviceSongs();
@@ -582,7 +600,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
         final isVideo = song.genre == "VideoFile";
         final icon = isVideo ? Icons.movie : Icons.music_note;
         return ListTile(
-          leading: isCustomFile
+          leading: (isCustomFile || isVideo)
               ? Container(
                   width: 50,
                   height: 50,
@@ -1404,7 +1422,7 @@ class SongSearchDelegate extends SearchDelegate {
         final isVideo = song.genre == "VideoFile";
         final icon = isVideo ? Icons.movie : Icons.music_note;
         return ListTile(
-          leading: isCustomFile
+          leading: (isCustomFile || isVideo)
               ? Container(
                   width: 50,
                   height: 50,
