@@ -61,6 +61,8 @@ class _LibraryScreenState extends State<LibraryScreen> {
   LibraryMode _libraryMode = LibraryMode.manual;
   String? _folderPath;
   FileFilter _fileFilter = FileFilter.all;
+  bool _isAddingFiles = false;
+  double _addingProgress = 0.0;
 
   @override
   void initState() {
@@ -278,14 +280,20 @@ class _LibraryScreenState extends State<LibraryScreen> {
                 );
 
                 if (result != null) {
-                  // Lấy danh sách đường dẫn và phát nhạc
+                  setState(() {
+                    _isAddingFiles = true;
+                    _addingProgress = 0.0;
+                  });
+
                   List<String> paths = result.paths
                       .whereType<String>()
                       .toList();
-                  debugPrint(
-                    "Đang phát các file: $paths",
-                  ); // Kiểm tra log xem có đường dẫn không
-                  final songs = paths.map((path) {
+
+                  List<SongModel> newSongs = [];
+                  int totalFiles = paths.length;
+
+                  for (int i = 0; i < totalFiles; i++) {
+                    String path = paths[i];
                     final fileName = path.split(RegExp(r'[/\\]')).last;
                     String directory = path;
                     final lastSeparator = path.lastIndexOf(RegExp(r'[/\\]'));
@@ -293,14 +301,23 @@ class _LibraryScreenState extends State<LibraryScreen> {
                       directory = path.substring(0, lastSeparator);
                     }
                     final isMp4 = path.toLowerCase().endsWith('.mp4');
-                    return SongModel({
-                      "_id": path.hashCode,
-                      "_data": path,
-                      "title": fileName,
-                      "artist": directory,
-                      "genre": isMp4 ? "VideoFile" : "CustomFile",
+
+                    newSongs.add(
+                      SongModel({
+                        "_id": path.hashCode,
+                        "_data": path,
+                        "title": fileName,
+                        "artist": directory,
+                        "genre": isMp4 ? "VideoFile" : "CustomFile",
+                      }),
+                    );
+
+                    // Cập nhật tiến trình và đợi 1 chút để UI kịp vẽ lại
+                    setState(() {
+                      _addingProgress = (i + 1) / totalFiles;
                     });
-                  }).toList();
+                    await Future.delayed(const Duration(milliseconds: 10));
+                  }
 
                   int playIndex = 0;
                   setState(() {
@@ -308,10 +325,11 @@ class _LibraryScreenState extends State<LibraryScreen> {
                     if (_selectedSongs != null) {
                       playIndex =
                           _selectedSongs!.length; // Vị trí bắt đầu của bài mới
-                      _selectedSongs!.addAll(songs);
+                      _selectedSongs!.addAll(newSongs);
                     } else {
-                      _selectedSongs = songs;
+                      _selectedSongs = newSongs;
                     }
+                    _isAddingFiles = false;
                   });
                   _saveSelectedSongs(); // Lưu lại danh sách mới
                   AudioManager().playSong(_selectedSongs!, playIndex);
@@ -558,50 +576,86 @@ class _LibraryScreenState extends State<LibraryScreen> {
           ),
         ],
       ),
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              const Color(0xFF121212),
-              Colors.deepPurple.shade900.withValues(alpha: 0.2),
-            ],
+      body: Stack(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  const Color(0xFF121212),
+                  Colors.deepPurple.shade900.withValues(alpha: 0.2),
+                ],
+              ),
+            ),
+            child: !_hasPermission
+                ? const Center(
+                    child: Text("Vui lòng cấp quyền truy cập để tải nhạc"),
+                  )
+                : _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _libraryMode == LibraryMode.device
+                ? (_librarySongs.isEmpty
+                      ? const Center(
+                          child: Text("Không tìm thấy bài hát nào trên máy"),
+                        )
+                      : _buildSongList(_getFilteredSongs(_librarySongs)))
+                : (_libraryMode == LibraryMode.folder
+                      ? (_folderSongs.isEmpty
+                            ? Center(
+                                child: Text(
+                                  _folderPath == null
+                                      ? "Chưa chọn thư mục. Nhấn nút folder để chọn."
+                                      : "Thư mục trống",
+                                ),
+                              )
+                            : _buildSongList(
+                                _getFilteredSongs(_folderSongs),
+                                isCustomFile: true,
+                              ))
+                      : (_selectedSongs == null || _selectedSongs!.isEmpty
+                            ? const Center(
+                                child: Text("Nhấn nút + để thêm bài hát"),
+                              )
+                            : _buildSongList(
+                                _getFilteredSongs(_selectedSongs!),
+                                isCustomFile: true,
+                              ))),
           ),
-        ),
-        child: !_hasPermission
-            ? const Center(
-                child: Text("Vui lòng cấp quyền truy cập để tải nhạc"),
-              )
-            : _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : _libraryMode == LibraryMode.device
-            ? (_librarySongs.isEmpty
-                  ? const Center(
-                      child: Text("Không tìm thấy bài hát nào trên máy"),
-                    )
-                  : _buildSongList(_getFilteredSongs(_librarySongs)))
-            : (_libraryMode == LibraryMode.folder
-                  ? (_folderSongs.isEmpty
-                        ? Center(
-                            child: Text(
-                              _folderPath == null
-                                  ? "Chưa chọn thư mục. Nhấn nút folder để chọn."
-                                  : "Thư mục trống",
-                            ),
-                          )
-                        : _buildSongList(
-                            _getFilteredSongs(_folderSongs),
-                            isCustomFile: true,
-                          ))
-                  : (_selectedSongs == null || _selectedSongs!.isEmpty
-                        ? const Center(
-                            child: Text("Nhấn nút + để thêm bài hát"),
-                          )
-                        : _buildSongList(
-                            _getFilteredSongs(_selectedSongs!),
-                            isCustomFile: true,
-                          ))),
+          if (_isAddingFiles)
+            Container(
+              color: Colors.black.withValues(alpha: 0.8),
+              child: Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 80,
+                      height: 80,
+                      child: CircularProgressIndicator(
+                        value: _addingProgress,
+                        strokeWidth: 8,
+                        backgroundColor: Colors.white10,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      "Đang thêm... ${(_addingProgress * 100).toInt()}%",
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
       bottomNavigationBar: const MiniPlayer(),
     );
