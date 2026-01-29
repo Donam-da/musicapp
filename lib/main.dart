@@ -319,6 +319,18 @@ class _LibraryScreenState extends State<LibraryScreen>
     }).toList();
   }
 
+  List<SongModel> _getCurrentList() {
+    List<SongModel> source;
+    if (_libraryMode == LibraryMode.device) {
+      source = _librarySongs;
+    } else if (_libraryMode == LibraryMode.folder) {
+      source = _folderSongs;
+    } else {
+      source = _selectedSongs ?? [];
+    }
+    return _getFilteredSongs(source);
+  }
+
   // Hàm chọn thư mục tùy chỉnh để khắc phục lỗi trên Android 14
   Future<void> _pickFolder() async {
     if (Platform.isAndroid) {
@@ -553,6 +565,33 @@ class _LibraryScreenState extends State<LibraryScreen>
         centerTitle: true,
         actions: _isSelectionMode
             ? [
+                IconButton(
+                  icon: const Icon(Icons.select_all),
+                  tooltip: "Chọn tất cả",
+                  onPressed: () {
+                    final currentList = _getCurrentList();
+                    setState(() {
+                      final allSelected =
+                          currentList.isNotEmpty &&
+                          currentList.every(
+                            (s) => _multiSelectedPaths.contains(s.data),
+                          );
+
+                      if (allSelected) {
+                        _multiSelectedPaths.removeAll(
+                          currentList.map((s) => s.data),
+                        );
+                        if (_multiSelectedPaths.isEmpty) {
+                          _isSelectionMode = false;
+                        }
+                      } else {
+                        _multiSelectedPaths.addAll(
+                          currentList.map((s) => s.data),
+                        );
+                      }
+                    });
+                  },
+                ),
                 IconButton(
                   icon: const Icon(Icons.delete),
                   tooltip: "Xóa đã chọn",
