@@ -1207,6 +1207,28 @@ class _FilePickerCustomScreenState extends State<FilePickerCustomScreen> {
           icon: const Icon(Icons.arrow_back),
           onPressed: _goUp,
         ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.select_all),
+            tooltip: "Chọn tất cả tệp trong thư mục này",
+            onPressed: () {
+              // Lọc ra các file (không lấy thư mục con) trong danh sách hiện tại
+              final files = _dirs.whereType<File>().toList();
+              if (files.isEmpty) return;
+
+              setState(() {
+                final allSelected = files.every(
+                  (f) => _selectedFiles.contains(f.path),
+                );
+                if (allSelected) {
+                  _selectedFiles.removeAll(files.map((f) => f.path));
+                } else {
+                  _selectedFiles.addAll(files.map((f) => f.path));
+                }
+              });
+            },
+          ),
+        ],
       ),
       body: Column(
         children: [
